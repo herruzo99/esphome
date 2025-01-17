@@ -11,7 +11,6 @@
 #include "esphome/core/gpio.h"
 #include "esphome/core/helpers.h"
 
-#include <Audio.h>
 
 namespace esphome {
 namespace i2s_audio {
