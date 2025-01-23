@@ -30,7 +30,7 @@ class ImageDecoder {
    *
    * @param download_size The total number of bytes that need to be downloaded for the image.
    */
-  virtual void prepare(uint32_t download_size) { this->download_size_ = download_size; }
+  virtual void prepare(size_t download_size) { this->download_size_ = download_size; }
 
   /**
    * @brief Decode a part of the image. It will try reading from the buffer.
@@ -75,8 +75,8 @@ class ImageDecoder {
   OnlineImage *image_;
   // Initializing to 1, to ensure it is distinguishable from initial "decoded_bytes_".
   // Will be overwritten anyway once the download size is known.
-  uint32_t download_size_ = 1;
-  uint32_t decoded_bytes_ = 0;
+  size_t download_size_ = 1;
+  size_t decoded_bytes_ = 0;
   double x_scale_ = 1.0;
   double y_scale_ = 1.0;
 };
