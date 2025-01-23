@@ -10,6 +10,10 @@ static const char *const TAG = "online_image";
 #include "png_image.h"
 #endif
 
+#ifdef USE_ONLINE_IMAGE_BMP_SUPPORT
+#include "bmp_image.h"
+#endif
+
 namespace esphome {
 namespace online_image {
 
@@ -120,9 +124,14 @@ void OnlineImage::update() {
 
 #ifdef USE_ONLINE_IMAGE_PNG_SUPPORT
   if (this->format_ == ImageFormat::PNG) {
-    this->decoder_ = esphome::make_unique<PngDecoder>(this);
+    this->decoder_ = make_unique<PngDecoder>(this);
   }
 #endif  // ONLINE_IMAGE_PNG_SUPPORT
+#ifdef USE_ONLINE_IMAGE_BMP_SUPPORT
+  if (this->format_ == ImageFormat::BMP) {
+    this->decoder_ = make_unique<BmpDecoder>(this);
+  }
+#endif  // ONLINE_IMAGE_BMP_SUPPORT
 
   if (!this->decoder_) {
     ESP_LOGE(TAG, "Could not instantiate decoder. Image format unsupported.");

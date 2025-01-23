@@ -61,8 +61,22 @@ class PNGFormat(Format):
         cg.add_library("pngle", "1.0.2")
 
 
+class BMPFormat(Format):
+    def __init__(self):
+        super().__init__("BMP")
+
+    def actions(self):
+        cg.add_define("USE_ONLINE_IMAGE_BMP_SUPPORT")
+
+
 # New formats can be added here.
-IMAGE_FORMATS = {x.image_type: x for x in (PNGFormat(),)}
+IMAGE_FORMATS = {
+    x.image_type: x
+    for x in (
+        PNGFormat(),
+        BMPFormat(),
+    )
+}
 
 OnlineImage = online_image_ns.class_("OnlineImage", cg.PollingComponent, Image_)
 

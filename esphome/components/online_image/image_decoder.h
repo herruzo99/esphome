@@ -4,6 +4,12 @@
 namespace esphome {
 namespace online_image {
 
+enum DecodeError : int {
+  DECODE_ERROR_INVALID_TYPE = -1,
+  DECODE_ERROR_UNSUPPORTED_FORMAT = -2,
+  DECODE_ERROR_OUT_OF_MEMORY = -3,
+};
+
 class OnlineImage;
 
 /**
@@ -45,8 +51,9 @@ class ImageDecoder {
    *
    * @param width The image's width.
    * @param height The image's height.
+   * @return true if the image was resized, false otherwise.
    */
-  void set_size(int width, int height);
+  bool set_size(int width, int height);
 
   /**
    * @brief Fill a rectangle on the display_buffer using the defined color.
