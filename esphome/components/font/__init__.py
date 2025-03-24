@@ -12,8 +12,8 @@ import esphome_glyphsets as glyphsets
 from freetype import (
     FT_LOAD_NO_BITMAP,
     FT_LOAD_RENDER,
-    FT_LOAD_TARGET_MONO,
     Face,
+    ft_pixel_mode_grays,
     ft_pixel_mode_mono,
 )
 import requests
@@ -523,9 +523,14 @@ async def to_code(config):
         flags = FT_LOAD_RENDER
         if bpp != 1:
             flags |= FT_LOAD_NO_BITMAP
+<<<<<<< HEAD
         else:
             flags |= FT_LOAD_TARGET_MONO
         font.load_char(codepoint, flags)
+=======
+        font.load_char(codepoint, flags)
+        font.glyph.render(mode)
+>>>>>>> 20c777852 ([font] More robust handling of fixed font sizes. (#8443))
         width = font.glyph.bitmap.width
         height = font.glyph.bitmap.rows
         buffer = font.glyph.bitmap.buffer
