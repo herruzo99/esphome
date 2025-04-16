@@ -82,6 +82,7 @@ CONFIG_SCHEMA = cv.All(
         },
         key=CONF_DAC_TYPE,
     ),
+    cv.only_with_arduino,
     validate_esp32_variant,
 )
 
