@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef USE_ESP32_FRAMEWORK_ARDUINO
+//#ifdef USE_ESP32_FRAMEWORK_ARDUINO
 
 #include "../i2s_audio.h"
 
@@ -84,4 +84,4 @@ class I2SAudioMediaPlayer : public Component, public Parented<I2SAudioComponent>
 }  // namespace i2s_audio
 }  // namespace esphome
 
-#endif  // USE_ESP32_FRAMEWORK_ARDUINO
+//#endif  // USE_ESP32_FRAMEWORK_ARDUINO
