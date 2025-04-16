@@ -22,7 +22,7 @@ static const size_t INPUT_BUFFER_SIZE = 32 * SAMPLE_RATE_HZ / 1000;  // 32ms * 1
 static const size_t BUFFER_SIZE = 512 * SAMPLE_RATE_HZ / 1000;
 static const size_t SEND_BUFFER_SIZE = INPUT_BUFFER_SIZE * sizeof(int16_t);
 static const size_t RECEIVE_SIZE = 1024;
-static const size_t SPEAKER_BUFFER_SIZE = 8 * 16 * RECEIVE_SIZE;
+static const size_t SPEAKER_BUFFER_SIZE = 16 * 16 * RECEIVE_SIZE;
 
 VoiceAssistant::VoiceAssistant() { global_voice_assistant = this; }
 
