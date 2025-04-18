@@ -29,7 +29,7 @@ from esphome.external_files import download_content
 
 _LOGGER = logging.getLogger(__name__)
 
-AUTO_LOAD = ["audio", "psram"]
+AUTO_LOAD = ["audio"]
 
 CODEOWNERS = ["@kahrendt", "@synesthesiam"]
 DOMAIN = "media_player"
@@ -343,7 +343,7 @@ async def to_code(config):
         esp32.add_idf_sdkconfig_option("CONFIG_LWIP_TCPIP_RECVMBOX_SIZE", 512)
 
         # Allocate wifi buffers in PSRAM
-        esp32.add_idf_sdkconfig_option("CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP", True)
+        #esp32.add_idf_sdkconfig_option("CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP", True)
 
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
