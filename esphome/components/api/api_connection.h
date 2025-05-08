@@ -221,6 +221,7 @@ class APIConnection : public APIServerConnection {
   void bluetooth_gatt_notify(const BluetoothGATTNotifyRequest &msg) override;
   BluetoothConnectionsFreeResponse subscribe_bluetooth_connections_free(
       const SubscribeBluetoothConnectionsFreeRequest &msg) override;
+  void bluetooth_scanner_set_mode(const BluetoothScannerSetModeRequest &msg) override;
 
 #endif
 #ifdef USE_HOMEASSISTANT_TIME
@@ -300,6 +301,9 @@ class APIConnection : public APIServerConnection {
     return {};
   }
   void execute_service(const ExecuteServiceRequest &msg) override;
+#ifdef USE_API_NOISE
+  NoiseEncryptionSetKeyResponse noise_encryption_set_key(const NoiseEncryptionSetKeyRequest &msg) override;
+#endif
 
   bool is_authenticated() override { return this->connection_state_ == ConnectionState::AUTHENTICATED; }
   bool is_connection_setup() override {
@@ -308,9 +312,10 @@ class APIConnection : public APIServerConnection {
   void on_fatal_error() override;
   void on_unauthenticated_access() override;
   void on_no_setup_connection() override;
-  ProtoWriteBuffer create_buffer() override {
+  ProtoWriteBuffer create_buffer(uint32_t reserve_size) override {
     // FIXME: ensure no recursive writes can happen
     this->proto_write_buffer_.clear();
+    this->proto_write_buffer_.reserve(reserve_size);
     return {&this->proto_write_buffer_};
   }
   bool send_buffer(ProtoWriteBuffer buffer, uint32_t message_type) override;
