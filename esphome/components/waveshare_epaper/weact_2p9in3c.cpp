@@ -47,9 +47,6 @@ int WeActEPaper2P9In3C::get_width_internal() { return WIDTH; }
 int WeActEPaper2P9In3C::get_height_internal() { return HEIGHT; }
 uint32_t WeActEPaper2P9In3C::idle_timeout_() { return 2500; }
 
-WeActEPaper2P9In3C::WeActEPaper2P9In3C() {
-  this->reset_duration_ = 20; // e.g., 20ms
-}
 
 void WeActEPaper2P9In3C::dump_config() {
   LOG_DISPLAY("", "WeAct E-Paper (3 Color)", this)
