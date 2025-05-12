@@ -6,14 +6,40 @@
 namespace esphome {
 namespace waveshare_epaper {
 
-// ... (Keep existing comments and definitions) ...
+
+// It's worth adding some notes for this implementation
+// - This display doesn't ship with a LUT, instead it relies on the internal values set during OTP
+// - This display inverts Black & White in memory, requiring a different implementation for draw_absolute_pixel_internal
+// - The reference implementation by the vendor points to
+// https://github.com/ZinggJM/GxEPD2/blob/220fc5845c08b83c8dbac63e0cb83e1a774071ca/src/epd3c/GxEPD2_290_C90c.cpp
+// - The datasheet is here
+// https://github.com/WeActStudio/WeActStudio.EpaperModule/blob/master/Doc/ZJY128296-029EAAMFGN.pdf
 
 static const char *const TAG = "weact_2.90_3c";
 
 static const uint16_t HEIGHT = 296;
 static const uint16_t WIDTH = 128;
 
-// ... (Keep existing command definitions) ...
+// General Commands
+static const uint8_t SW_RESET = 0x12;
+static const uint8_t ACTIVATE = 0x20;
+static const uint8_t WRITE_BLACK = 0x24;
+static const uint8_t WRITE_COLOR = 0x26;
+static const uint8_t SLEEP[] = {0x10, 0x01};
+static const uint8_t UPDATE_FULL[] = {0x22, 0xF7};
+
+// Configuration commands
+static const uint8_t DRV_OUT_CTL[] = {0x01, 0x27, 0x01, 0x00};  // driver output control
+static const uint8_t DATA_ENTRY[] = {0x11, 0x03};               // data entry mode
+static const uint8_t BORDER_FULL[] = {0x3C, 0x05};              // border waveform
+static const uint8_t TEMP_SENS[] = {0x18, 0x80};                // use internal temp sensor
+static const uint8_t DISPLAY_UPDATE[] = {0x21, 0x00, 0x80};     // display update control
+
+// For controlling which part of the image we want to write
+static const uint8_t RAM_X_RANGE[] = {0x44, 0x00, WIDTH / 8u - 1};
+static const uint8_t RAM_Y_RANGE[] = {0x45, 0x00, 0x00, (uint8_t) HEIGHT - 1, (uint8_t) (HEIGHT >> 8)};
+static const uint8_t RAM_X_POS[] = {0x4E, 0x00};  // Always start at 0
+static const uint8_t RAM_Y_POS = 0x4F;
 
 #define SEND(x) this->cmd_data(x, sizeof(x))
 
