@@ -149,10 +149,24 @@ void HOT WeActEPaper2P9In3C::draw_absolute_pixel_internal(int x, int y, Color co
 }
 
 void WeActEPaper2P9In3C::full_update_() {
-  ESP_LOGI(TAG, "Performing full e-paper update.");
+  int64_t start_time = millis();
+  ESP_LOGI(TAG, "Performing full e-paper update. Start time: %lld us", start_time);
+
+  int64_t write_buffer_start_time = millis();
   this->write_buffer_(0, this->get_height_internal());
+  int64_t write_buffer_end_time = millis();
+  ESP_LOGI(TAG, "write_buffer_ took %lld us", write_buffer_end_time - write_buffer_start_time);
+
+  int64_t send_command_start_time = millis();
   SEND(UPDATE_FULL);
+  int64_t send_command_end_time = millis();
+  ESP_LOGI(TAG, "SEND(UPDATE_FULL) took %lld us", send_command_end_time - send_command_start_time);
+
   this->command(ACTIVATE);  // don't wait here
+
+  int64_t end_time = millis();
+  ESP_LOGI(TAG, "Full e-paper update sequence finished. Total time (excluding ACTIVATE wait): %lld us", end_time - start_time);
+
   this->is_busy_ = false;
 }
 
