@@ -1,17 +1,20 @@
-import esphome.codegen as cg
-from esphome.components import media_player, esp32
-import esphome.config_validation as cv
-
 from esphome import pins
-
+import esphome.codegen as cg
+from esphome.components import esp32, media_player
+import esphome.config_validation as cv
 from esphome.const import CONF_ID, CONF_MODE
 
 from .. import (
-    i2s_audio_ns,
-    I2SAudioComponent,
-    I2SAudioOut,
     CONF_I2S_AUDIO_ID,
     CONF_I2S_DOUT_PIN,
+    CONF_LEFT,
+    CONF_MONO,
+    CONF_RIGHT,
+    CONF_STEREO,
+    I2SAudioComponent,
+    I2SAudioOut,
+    i2s_audio_ns,
+    use_legacy,
 )
 
 CODEOWNERS = ["@jesserockz"]
@@ -30,12 +33,12 @@ CONF_DAC_TYPE = "dac_type"
 CONF_I2S_COMM_FMT = "i2s_comm_fmt"
 
 INTERNAL_DAC_OPTIONS = {
-    "left": i2s_dac_mode_t.I2S_DAC_CHANNEL_LEFT_EN,
-    "right": i2s_dac_mode_t.I2S_DAC_CHANNEL_RIGHT_EN,
-    "stereo": i2s_dac_mode_t.I2S_DAC_CHANNEL_BOTH_EN,
+    CONF_LEFT: i2s_dac_mode_t.I2S_DAC_CHANNEL_LEFT_EN,
+    CONF_RIGHT: i2s_dac_mode_t.I2S_DAC_CHANNEL_RIGHT_EN,
+    CONF_STEREO: i2s_dac_mode_t.I2S_DAC_CHANNEL_BOTH_EN,
 }
 
-EXTERNAL_DAC_OPTIONS = ["mono", "stereo"]
+EXTERNAL_DAC_OPTIONS = [CONF_MONO, CONF_STEREO]
 
 NO_INTERNAL_DAC_VARIANTS = [esp32.const.VARIANT_ESP32S2]
 
@@ -83,6 +86,14 @@ CONFIG_SCHEMA = cv.All(
     cv.only_with_arduino,
     validate_esp32_variant,
 )
+
+
+def _final_validate(_):
+    if not use_legacy():
+        raise cv.Invalid("I2S media player is only compatible with legacy i2s driver.")
+
+
+FINAL_VALIDATE_SCHEMA = _final_validate
 
 
 async def to_code(config):

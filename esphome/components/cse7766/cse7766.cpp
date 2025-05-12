@@ -1,8 +1,5 @@
 #include "cse7766.h"
 #include "esphome/core/log.h"
-#include <cinttypes>
-#include <iomanip>
-#include <sstream>
 
 namespace esphome {
 namespace cse7766 {
@@ -43,7 +40,7 @@ bool CSE7766Component::check_byte_() {
   uint8_t index = this->raw_data_index_;
   uint8_t byte = this->raw_data_[index];
   if (index == 0) {
-    return !((byte != 0x55) && ((byte & 0xF0) != 0xF0) && (byte != 0xAA));
+    return (byte == 0x55) || ((byte & 0xF0) == 0xF0) || (byte == 0xAA);
   }
 
   if (index == 1) {
@@ -72,12 +69,8 @@ bool CSE7766Component::check_byte_() {
 void CSE7766Component::parse_data_() {
 #if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERY_VERBOSE
   {
-    std::stringstream ss;
-    ss << "Raw data:" << std::hex << std::uppercase << std::setfill('0');
-    for (uint8_t i = 0; i < 23; i++) {
-      ss << ' ' << std::setw(2) << static_cast<unsigned>(this->raw_data_[i]);
-    }
-    ESP_LOGVV(TAG, "%s", ss.str().c_str());
+    std::string s = format_hex_pretty(this->raw_data_, sizeof(this->raw_data_));
+    ESP_LOGVV(TAG, "Raw data: %s", s.c_str());
   }
 #endif
 
@@ -118,7 +111,7 @@ void CSE7766Component::parse_data_() {
   uint32_t power_coeff = this->get_24_bit_uint_(14);
   uint32_t power_cycle = this->get_24_bit_uint_(17);
   uint8_t adj = this->raw_data_[20];
-  uint32_t cf_pulses = (this->raw_data_[21] << 8) + this->raw_data_[22];
+  uint16_t cf_pulses = (this->raw_data_[21] << 8) + this->raw_data_[22];
 
   bool have_power = adj & 0x10;
   bool have_current = adj & 0x20;
@@ -132,10 +125,22 @@ void CSE7766Component::parse_data_() {
     }
   }
 
+  float energy = 0.0;
+  if (this->energy_sensor_ != nullptr) {
+    if (this->cf_pulses_last_ == 0 && !this->energy_sensor_->has_state()) {
+      this->cf_pulses_last_ = cf_pulses;
+    }
+    uint16_t cf_diff = cf_pulses - this->cf_pulses_last_;
+    this->cf_pulses_total_ += cf_diff;
+    this->cf_pulses_last_ = cf_pulses;
+    energy = this->cf_pulses_total_ * float(power_coeff) / 1000000.0f / 3600.0f;
+    this->energy_sensor_->publish_state(energy);
+  }
+
   float power = 0.0f;
-  float energy = 0.0f;
   if (power_cycle_exceeds_range) {
     // Datasheet: power cycle exceeding range means active power is 0
+    have_power = true;
     if (this->power_sensor_ != nullptr) {
       this->power_sensor_->publish_state(0.0f);
     }
@@ -144,27 +149,6 @@ void CSE7766Component::parse_data_() {
     if (this->power_sensor_ != nullptr) {
       this->power_sensor_->publish_state(power);
     }
-
-    // Add CF pulses to the total energy only if we have Power coefficient to multiply by
-
-    if (this->cf_pulses_last_ == 0) {
-      this->cf_pulses_last_ = cf_pulses;
-    }
-
-    uint32_t cf_diff;
-    if (cf_pulses < this->cf_pulses_last_) {
-      cf_diff = cf_pulses + (0x10000 - this->cf_pulses_last_);
-    } else {
-      cf_diff = cf_pulses - this->cf_pulses_last_;
-    }
-    this->cf_pulses_last_ = cf_pulses;
-
-    energy = cf_diff * float(power_coeff) / 1000000.0f / 3600.0f;
-    this->energy_total_ += energy;
-    if (this->energy_sensor_ != nullptr)
-      this->energy_sensor_->publish_state(this->energy_total_);
-  } else if ((this->energy_sensor_ != nullptr) && !this->energy_sensor_->has_state()) {
-    this->energy_sensor_->publish_state(0);
   }
 
   float current = 0.0f;
@@ -183,23 +167,57 @@ void CSE7766Component::parse_data_() {
     }
   }
 
+  if (have_voltage && have_current) {
+    const float apparent_power = voltage * current;
+    if (this->apparent_power_sensor_ != nullptr) {
+      this->apparent_power_sensor_->publish_state(apparent_power);
+    }
+    if (have_power && this->reactive_power_sensor_ != nullptr) {
+      const float reactive_power = apparent_power - power;
+      if (reactive_power < 0.0f) {
+        ESP_LOGD(TAG, "Impossible reactive power: %.4f is negative", reactive_power);
+        this->reactive_power_sensor_->publish_state(0.0f);
+      } else {
+        this->reactive_power_sensor_->publish_state(reactive_power);
+      }
+    }
+    if (this->power_factor_sensor_ != nullptr && (have_power || power_cycle_exceeds_range)) {
+      float pf = NAN;
+      if (apparent_power > 0) {
+        pf = power / apparent_power;
+        if (pf < 0 || pf > 1) {
+          ESP_LOGD(TAG, "Impossible power factor: %.4f not in interval [0, 1]", pf);
+          pf = NAN;
+        }
+      } else if (apparent_power == 0 && power == 0) {
+        // No load, report ideal power factor
+        pf = 1.0f;
+      } else if (current == 0 && calculated_current <= 0.05f) {
+        // Datasheet: minimum measured current is 50mA
+        ESP_LOGV(TAG, "Can't calculate power factor (current below minimum for CSE7766)");
+      } else {
+        ESP_LOGW(TAG, "Can't calculate power factor from P = %.4f W, S = %.4f VA", power, apparent_power);
+      }
+      this->power_factor_sensor_->publish_state(pf);
+    }
+  }
+
 #if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERY_VERBOSE
   {
-    std::stringstream ss;
-    ss << "Parsed:";
+    std::string buf = "Parsed:";
     if (have_voltage) {
-      ss << " V=" << voltage << "V";
+      buf += str_sprintf(" V=%fV", voltage);
     }
     if (have_current) {
-      ss << " I=" << current * 1000.0f << "mA (~" << calculated_current * 1000.0f << "mA)";
+      buf += str_sprintf(" I=%fmA (~%fmA)", current * 1000.0f, calculated_current * 1000.0f);
     }
     if (have_power) {
-      ss << " P=" << power << "W";
+      buf += str_sprintf(" P=%fW", power);
     }
     if (energy != 0.0f) {
-      ss << " E=" << energy << "kWh (" << cf_pulses << ")";
+      buf += str_sprintf(" E=%fkWh (%u)", energy, cf_pulses);
     }
-    ESP_LOGVV(TAG, "%s", ss.str().c_str());
+    ESP_LOGVV(TAG, "%s", buf.c_str());
   }
 #endif
 }
@@ -215,7 +233,10 @@ void CSE7766Component::dump_config() {
   LOG_SENSOR("  ", "Current", this->current_sensor_);
   LOG_SENSOR("  ", "Power", this->power_sensor_);
   LOG_SENSOR("  ", "Energy", this->energy_sensor_);
-  this->check_uart_settings(4800);
+  LOG_SENSOR("  ", "Apparent Power", this->apparent_power_sensor_);
+  LOG_SENSOR("  ", "Reactive Power", this->reactive_power_sensor_);
+  LOG_SENSOR("  ", "Power Factor", this->power_factor_sensor_);
+  this->check_uart_settings(4800, 1, uart::UART_CONFIG_PARITY_EVEN);
 }
 
 }  // namespace cse7766

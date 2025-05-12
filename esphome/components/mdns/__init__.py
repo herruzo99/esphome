@@ -1,17 +1,17 @@
+import esphome.codegen as cg
+from esphome.components.esp32 import add_idf_component
+import esphome.config_validation as cv
 from esphome.const import (
+    CONF_DISABLED,
     CONF_ID,
     CONF_PORT,
     CONF_PROTOCOL,
-    CONF_SERVICES,
     CONF_SERVICE,
+    CONF_SERVICES,
     KEY_CORE,
     KEY_FRAMEWORK_VERSION,
-    CONF_DISABLED,
 )
-import esphome.codegen as cg
-import esphome.config_validation as cv
 from esphome.core import CORE, coroutine_with_priority
-from esphome.components.esp32 import add_idf_component
 
 CODEOWNERS = ["@esphome/core"]
 DEPENDENCIES = ["network"]
@@ -35,8 +35,8 @@ SERVICE_SCHEMA = cv.Schema(
     {
         cv.Required(CONF_SERVICE): cv.string,
         cv.Required(CONF_PROTOCOL): cv.string,
-        cv.Optional(CONF_PORT, default=0): cv.Any(0, cv.port),
-        cv.Optional(CONF_TXT, default={}): {cv.string: cv.string},
+        cv.Optional(CONF_PORT, default=0): cv.templatable(cv.Any(0, cv.port)),
+        cv.Optional(CONF_TXT, default={}): {cv.string: cv.templatable(cv.string)},
     }
 )
 
@@ -74,6 +74,9 @@ def mdns_service(
 
 @coroutine_with_priority(55.0)
 async def to_code(config):
+    if config[CONF_DISABLED] is True:
+        return
+
     if CORE.using_arduino:
         if CORE.is_esp32:
             cg.add_library("ESPmDNS", None)
@@ -88,12 +91,9 @@ async def to_code(config):
         add_idf_component(
             name="mdns",
             repo="https://github.com/espressif/esp-protocols.git",
-            ref="mdns-v1.2.2",
+            ref="mdns-v1.8.2",
             path="components/mdns",
         )
-
-    if config[CONF_DISABLED]:
-        return
 
     cg.add_define("USE_MDNS")
 
@@ -102,12 +102,18 @@ async def to_code(config):
 
     for service in config[CONF_SERVICES]:
         txt = [
-            mdns_txt_record(txt_key, txt_value)
+            cg.StructInitializer(
+                MDNSTXTRecord,
+                ("key", txt_key),
+                ("value", await cg.templatable(txt_value, [], cg.std_string)),
+            )
             for txt_key, txt_value in service[CONF_TXT].items()
         ]
-
         exp = mdns_service(
-            service[CONF_SERVICE], service[CONF_PROTOCOL], service[CONF_PORT], txt
+            service[CONF_SERVICE],
+            service[CONF_PROTOCOL],
+            await cg.templatable(service[CONF_PORT], [], cg.uint16),
+            txt,
         )
 
         cg.add(var.add_extra_service(exp))

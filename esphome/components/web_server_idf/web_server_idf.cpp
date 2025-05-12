@@ -7,6 +7,11 @@
 
 #include "esp_tls_crypto.h"
 
+#include "utils.h"
+
+#include "esphome/components/web_server/web_server.h"
+#include "esphome/components/web_server/list_entities.h"
+
 #include "web_server_idf.h"
 
 namespace esphome {
@@ -47,7 +52,7 @@ void AsyncWebServer::begin() {
     const httpd_uri_t handler_post = {
         .uri = "",
         .method = HTTP_POST,
-        .handler = AsyncWebServer::request_handler,
+        .handler = AsyncWebServer::request_post_handler,
         .user_ctx = this,
     };
     httpd_register_uri_handler(this->server_, &handler_post);
@@ -62,20 +67,62 @@ void AsyncWebServer::begin() {
   }
 }
 
+esp_err_t AsyncWebServer::request_post_handler(httpd_req_t *r) {
+  ESP_LOGVV(TAG, "Enter AsyncWebServer::request_post_handler. uri=%s", r->uri);
+  auto content_type = request_get_header(r, "Content-Type");
+  if (content_type.has_value() && *content_type != "application/x-www-form-urlencoded") {
+    ESP_LOGW(TAG, "Only application/x-www-form-urlencoded supported for POST request");
+    // fallback to get handler to support backward compatibility
+    return AsyncWebServer::request_handler(r);
+  }
+
+  if (!request_has_header(r, "Content-Length")) {
+    ESP_LOGW(TAG, "Content length is requred for post: %s", r->uri);
+    httpd_resp_send_err(r, HTTPD_411_LENGTH_REQUIRED, nullptr);
+    return ESP_OK;
+  }
+
+  if (r->content_len > HTTPD_MAX_REQ_HDR_LEN) {
+    ESP_LOGW(TAG, "Request size is to big: %zu", r->content_len);
+    httpd_resp_send_err(r, HTTPD_400_BAD_REQUEST, nullptr);
+    return ESP_FAIL;
+  }
+
+  std::string post_query;
+  if (r->content_len > 0) {
+    post_query.resize(r->content_len);
+    const int ret = httpd_req_recv(r, &post_query[0], r->content_len + 1);
+    if (ret <= 0) {  // 0 return value indicates connection closed
+      if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+        httpd_resp_send_err(r, HTTPD_408_REQ_TIMEOUT, nullptr);
+        return ESP_ERR_TIMEOUT;
+      }
+      httpd_resp_send_err(r, HTTPD_400_BAD_REQUEST, nullptr);
+      return ESP_FAIL;
+    }
+  }
+
+  AsyncWebServerRequest req(r, std::move(post_query));
+  return static_cast<AsyncWebServer *>(r->user_ctx)->request_handler_(&req);
+}
+
 esp_err_t AsyncWebServer::request_handler(httpd_req_t *r) {
-  ESP_LOGV(TAG, "Enter AsyncWebServer::request_handler. method=%u, uri=%s", r->method, r->uri);
+  ESP_LOGVV(TAG, "Enter AsyncWebServer::request_handler. method=%u, uri=%s", r->method, r->uri);
   AsyncWebServerRequest req(r);
-  auto *server = static_cast<AsyncWebServer *>(r->user_ctx);
-  for (auto *handler : server->handlers_) {
-    if (handler->canHandle(&req)) {
+  return static_cast<AsyncWebServer *>(r->user_ctx)->request_handler_(&req);
+}
+
+esp_err_t AsyncWebServer::request_handler_(AsyncWebServerRequest *request) const {
+  for (auto *handler : this->handlers_) {
+    if (handler->canHandle(request)) {
       // At now process only basic requests.
       // OTA requires multipart request support and handleUpload for it
-      handler->handleRequest(&req);
+      handler->handleRequest(request);
       return ESP_OK;
     }
   }
-  if (server->on_not_found_) {
-    server->on_not_found_(&req);
+  if (this->on_not_found_) {
+    this->on_not_found_(request);
     return ESP_OK;
   }
   return ESP_ERR_NOT_FOUND;
@@ -88,22 +135,10 @@ AsyncWebServerRequest::~AsyncWebServerRequest() {
   }
 }
 
-bool AsyncWebServerRequest::hasHeader(const char *name) const { return httpd_req_get_hdr_value_len(*this, name); }
+bool AsyncWebServerRequest::hasHeader(const char *name) const { return request_has_header(*this, name); }
 
 optional<std::string> AsyncWebServerRequest::get_header(const char *name) const {
-  size_t buf_len = httpd_req_get_hdr_value_len(*this, name);
-  if (buf_len == 0) {
-    return {};
-  }
-  auto buf = std::unique_ptr<char[]>(new char[++buf_len]);
-  if (!buf) {
-    ESP_LOGE(TAG, "No enough memory for get header %s", name);
-    return {};
-  }
-  if (httpd_req_get_hdr_value_str(*this, name, buf.get(), buf_len) != ESP_OK) {
-    return {};
-  }
-  return {buf.get()};
+  return request_get_header(*this, name);
 }
 
 std::string AsyncWebServerRequest::url() const {
@@ -193,74 +228,25 @@ void AsyncWebServerRequest::requestAuthentication(const char *realm) const {
   httpd_resp_send_err(*this, HTTPD_401_UNAUTHORIZED, nullptr);
 }
 
-static std::string url_decode(const std::string &in) {
-  std::string out;
-  out.reserve(in.size());
-  for (std::size_t i = 0; i < in.size(); ++i) {
-    if (in[i] == '%') {
-      ++i;
-      if (i + 1 < in.size()) {
-        auto c = parse_hex<uint8_t>(&in[i], 2);
-        if (c.has_value()) {
-          out += static_cast<char>(*c);
-          ++i;
-        } else {
-          out += '%';
-          out += in[i++];
-          out += in[i];
-        }
-      } else {
-        out += '%';
-        out += in[i];
-      }
-    } else if (in[i] == '+') {
-      out += ' ';
-    } else {
-      out += in[i];
-    }
-  }
-  return out;
-}
-
 AsyncWebParameter *AsyncWebServerRequest::getParam(const std::string &name) {
   auto find = this->params_.find(name);
   if (find != this->params_.end()) {
     return find->second;
   }
 
-  auto query_len = httpd_req_get_url_query_len(this->req_);
-  if (query_len == 0) {
-    return nullptr;
+  optional<std::string> val = query_key_value(this->post_query_, name);
+  if (!val.has_value()) {
+    auto url_query = request_get_url_query(*this);
+    if (url_query.has_value()) {
+      val = query_key_value(url_query.value(), name);
+    }
   }
 
-  auto query_str = std::unique_ptr<char[]>(new char[++query_len]);
-  if (!query_str) {
-    ESP_LOGE(TAG, "No enough memory for get query param");
-    return nullptr;
+  AsyncWebParameter *param = nullptr;
+  if (val.has_value()) {
+    param = new AsyncWebParameter(val.value());  // NOLINT(cppcoreguidelines-owning-memory)
   }
-
-  auto res = httpd_req_get_url_query_str(*this, query_str.get(), query_len);
-  if (res != ESP_OK) {
-    ESP_LOGW(TAG, "Can't get query for request: %s", esp_err_to_name(res));
-    return nullptr;
-  }
-
-  auto query_val = std::unique_ptr<char[]>(new char[query_len]);
-  if (!query_val) {
-    ESP_LOGE(TAG, "No enough memory for get query param value");
-    return nullptr;
-  }
-
-  res = httpd_query_key_value(query_str.get(), name.c_str(), query_val.get(), query_len);
-  if (res != ESP_OK) {
-    this->params_.insert({name, nullptr});
-    return nullptr;
-  }
-  query_str.release();
-  auto decoded = url_decode(query_val.get());
-  query_val.release();
-  auto *param = new AsyncWebParameter(decoded);  // NOLINT(cppcoreguidelines-owning-memory)
-  this->params_.insert(std::make_pair(name, param));
+  this->params_.insert({name, param});
   return param;
 }
 
@@ -271,14 +257,15 @@ void AsyncWebServerResponse::addHeader(const char *name, const char *value) {
 void AsyncResponseStream::print(float value) { this->print(to_string(value)); }
 
 void AsyncResponseStream::printf(const char *fmt, ...) {
-  std::string str;
   va_list args;
 
   va_start(args, fmt);
-  size_t length = vsnprintf(nullptr, 0, fmt, args);
+  const int length = vsnprintf(nullptr, 0, fmt, args);
   va_end(args);
 
+  std::string str;
   str.resize(length);
+
   va_start(args, fmt);
   vsnprintf(&str[0], length + 1, fmt, args);
   va_end(args);
@@ -293,21 +280,37 @@ AsyncEventSource::~AsyncEventSource() {
 }
 
 void AsyncEventSource::handleRequest(AsyncWebServerRequest *request) {
-  auto *rsp = new AsyncEventSourceResponse(request, this);  // NOLINT(cppcoreguidelines-owning-memory)
+  auto *rsp =  // NOLINT(cppcoreguidelines-owning-memory)
+      new AsyncEventSourceResponse(request, this, this->web_server_);
   if (this->on_connect_) {
     this->on_connect_(rsp);
   }
   this->sessions_.insert(rsp);
 }
 
-void AsyncEventSource::send(const char *message, const char *event, uint32_t id, uint32_t reconnect) {
+void AsyncEventSource::loop() {
   for (auto *ses : this->sessions_) {
-    ses->send(message, event, id, reconnect);
+    ses->loop();
   }
 }
 
-AsyncEventSourceResponse::AsyncEventSourceResponse(const AsyncWebServerRequest *request, AsyncEventSource *server)
-    : server_(server) {
+void AsyncEventSource::try_send_nodefer(const char *message, const char *event, uint32_t id, uint32_t reconnect) {
+  for (auto *ses : this->sessions_) {
+    ses->try_send_nodefer(message, event, id, reconnect);
+  }
+}
+
+void AsyncEventSource::deferrable_send_state(void *source, const char *event_type,
+                                             message_generator_t *message_generator) {
+  for (auto *ses : this->sessions_) {
+    ses->deferrable_send_state(source, event_type, message_generator);
+  }
+}
+
+AsyncEventSourceResponse::AsyncEventSourceResponse(const AsyncWebServerRequest *request,
+                                                   esphome::web_server_idf::AsyncEventSource *server,
+                                                   esphome::web_server::WebServer *ws)
+    : server_(server), web_server_(ws), entities_iterator_(new esphome::web_server::ListEntitiesIterator(ws, server)) {
   httpd_req_t *req = *request;
 
   httpd_resp_set_status(req, HTTPD_200);
@@ -326,6 +329,30 @@ AsyncEventSourceResponse::AsyncEventSourceResponse(const AsyncWebServerRequest *
 
   this->hd_ = req->handle;
   this->fd_ = httpd_req_to_sockfd(req);
+
+  // Configure reconnect timeout and send config
+  // this should always go through since the tcp send buffer is empty on connect
+  std::string message = ws->get_config_json();
+  this->try_send_nodefer(message.c_str(), "ping", millis(), 30000);
+
+  for (auto &group : ws->sorting_groups_) {
+    message = json::build_json([group](JsonObject root) {
+      root["name"] = group.second.name;
+      root["sorting_weight"] = group.second.weight;
+    });
+
+    // a (very) large number of these should be able to be queued initially without defer
+    // since the only thing in the send buffer at this point is the initial ping/config
+    this->try_send_nodefer(message.c_str(), "sorting_group");
+  }
+
+  this->entities_iterator_->begin(ws->include_internal_);
+
+  // just dump them all up-front and take advantage of the deferred queue
+  //     on second thought that takes too long, but leaving the commented code here for debug purposes
+  // while(!this->entities_iterator_->completed()) {
+  //  this->entities_iterator_->advance();
+  //}
 }
 
 void AsyncEventSourceResponse::destroy(void *ptr) {
@@ -334,52 +361,155 @@ void AsyncEventSourceResponse::destroy(void *ptr) {
   delete rsp;  // NOLINT(cppcoreguidelines-owning-memory)
 }
 
-void AsyncEventSourceResponse::send(const char *message, const char *event, uint32_t id, uint32_t reconnect) {
-  if (this->fd_ == 0) {
+// helper for allowing only unique entries in the queue
+void AsyncEventSourceResponse::deq_push_back_with_dedup_(void *source, message_generator_t *message_generator) {
+  DeferredEvent item(source, message_generator);
+
+  auto iter = std::find_if(this->deferred_queue_.begin(), this->deferred_queue_.end(),
+                           [&item](const DeferredEvent &test) -> bool { return test == item; });
+
+  if (iter != this->deferred_queue_.end()) {
+    (*iter) = item;
+  } else {
+    this->deferred_queue_.push_back(item);
+  }
+}
+
+void AsyncEventSourceResponse::process_deferred_queue_() {
+  while (!deferred_queue_.empty()) {
+    DeferredEvent &de = deferred_queue_.front();
+    std::string message = de.message_generator_(web_server_, de.source_);
+    if (this->try_send_nodefer(message.c_str(), "state")) {
+      // O(n) but memory efficiency is more important than speed here which is why std::vector was chosen
+      deferred_queue_.erase(deferred_queue_.begin());
+    } else {
+      break;
+    }
+  }
+}
+
+void AsyncEventSourceResponse::process_buffer_() {
+  if (event_buffer_.empty()) {
+    return;
+  }
+  if (event_bytes_sent_ == event_buffer_.size()) {
+    event_buffer_.resize(0);
+    event_bytes_sent_ = 0;
     return;
   }
 
-  std::string ev;
+  int bytes_sent = httpd_socket_send(this->hd_, this->fd_, event_buffer_.c_str() + event_bytes_sent_,
+                                     event_buffer_.size() - event_bytes_sent_, 0);
+  if (bytes_sent == HTTPD_SOCK_ERR_TIMEOUT || bytes_sent == HTTPD_SOCK_ERR_FAIL) {
+    return;
+  }
+  event_bytes_sent_ += bytes_sent;
+
+  if (event_bytes_sent_ == event_buffer_.size()) {
+    event_buffer_.resize(0);
+    event_bytes_sent_ = 0;
+  }
+}
+
+void AsyncEventSourceResponse::loop() {
+  process_buffer_();
+  process_deferred_queue_();
+  if (!this->entities_iterator_->completed())
+    this->entities_iterator_->advance();
+}
+
+bool AsyncEventSourceResponse::try_send_nodefer(const char *message, const char *event, uint32_t id,
+                                                uint32_t reconnect) {
+  if (this->fd_ == 0) {
+    return false;
+  }
+
+  process_buffer_();
+  if (!event_buffer_.empty()) {
+    // there is still pending event data to send first
+    return false;
+  }
+
+  // 8 spaces are standing in for the hexidecimal chunk length to print later
+  const char chunk_len_header[] = "        " CRLF_STR;
+  const int chunk_len_header_len = sizeof(chunk_len_header) - 1;
+
+  event_buffer_.append(chunk_len_header);
 
   if (reconnect) {
-    ev.append("retry: ", sizeof("retry: ") - 1);
-    ev.append(to_string(reconnect));
-    ev.append(CRLF_STR, CRLF_LEN);
+    event_buffer_.append("retry: ", sizeof("retry: ") - 1);
+    event_buffer_.append(to_string(reconnect));
+    event_buffer_.append(CRLF_STR, CRLF_LEN);
   }
 
   if (id) {
-    ev.append("id: ", sizeof("id: ") - 1);
-    ev.append(to_string(id));
-    ev.append(CRLF_STR, CRLF_LEN);
+    event_buffer_.append("id: ", sizeof("id: ") - 1);
+    event_buffer_.append(to_string(id));
+    event_buffer_.append(CRLF_STR, CRLF_LEN);
   }
 
   if (event && *event) {
-    ev.append("event: ", sizeof("event: ") - 1);
-    ev.append(event);
-    ev.append(CRLF_STR, CRLF_LEN);
+    event_buffer_.append("event: ", sizeof("event: ") - 1);
+    event_buffer_.append(event);
+    event_buffer_.append(CRLF_STR, CRLF_LEN);
   }
 
   if (message && *message) {
-    ev.append("data: ", sizeof("data: ") - 1);
-    ev.append(message);
-    ev.append(CRLF_STR, CRLF_LEN);
+    event_buffer_.append("data: ", sizeof("data: ") - 1);
+    event_buffer_.append(message);
+    event_buffer_.append(CRLF_STR, CRLF_LEN);
   }
 
-  if (ev.empty()) {
+  if (event_buffer_.empty()) {
+    return true;
+  }
+
+  event_buffer_.append(CRLF_STR, CRLF_LEN);
+  event_buffer_.append(CRLF_STR, CRLF_LEN);
+
+  // chunk length header itself and the final chunk terminating CRLF are not counted as part of the chunk
+  int chunk_len = event_buffer_.size() - CRLF_LEN - chunk_len_header_len;
+  char chunk_len_str[9];
+  snprintf(chunk_len_str, 9, "%08x", chunk_len);
+  std::memcpy(&event_buffer_[0], chunk_len_str, 8);
+
+  event_bytes_sent_ = 0;
+  process_buffer_();
+
+  return true;
+}
+
+void AsyncEventSourceResponse::deferrable_send_state(void *source, const char *event_type,
+                                                     message_generator_t *message_generator) {
+  // allow all json "details_all" to go through before publishing bare state events, this avoids unnamed entries showing
+  // up in the web GUI and reduces event load during initial connect
+  if (!entities_iterator_->completed() && 0 != strcmp(event_type, "state_detail_all"))
     return;
+
+  if (source == nullptr)
+    return;
+  if (event_type == nullptr)
+    return;
+  if (message_generator == nullptr)
+    return;
+
+  if (0 != strcmp(event_type, "state_detail_all") && 0 != strcmp(event_type, "state")) {
+    ESP_LOGE(TAG, "Can't defer non-state event");
   }
 
-  ev.append(CRLF_STR, CRLF_LEN);
+  process_buffer_();
+  process_deferred_queue_();
 
-  // Sending chunked content prelude
-  auto cs = str_snprintf("%x" CRLF_STR, 4 * sizeof(ev.size()) + CRLF_LEN, ev.size());
-  httpd_socket_send(this->hd_, this->fd_, cs.c_str(), cs.size(), 0);
-
-  // Sendiing content chunk
-  httpd_socket_send(this->hd_, this->fd_, ev.c_str(), ev.size(), 0);
-
-  // Indicate end of chunk
-  httpd_socket_send(this->hd_, this->fd_, CRLF_STR, CRLF_LEN, 0);
+  if (!event_buffer_.empty() || !deferred_queue_.empty()) {
+    // outgoing event buffer or deferred queue still not empty which means downstream tcp send buffer full, no point
+    // trying to send first
+    deq_push_back_with_dedup_(source, message_generator);
+  } else {
+    std::string message = message_generator(web_server_, source);
+    if (!this->try_send_nodefer(message.c_str(), "state")) {
+      deq_push_back_with_dedup_(source, message_generator);
+    }
+  }
 }
 
 }  // namespace web_server_idf

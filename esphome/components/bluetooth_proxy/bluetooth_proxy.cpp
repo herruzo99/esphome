@@ -25,6 +25,22 @@ std::vector<uint64_t> get_128bit_uuid_vec(esp_bt_uuid_t uuid_source) {
 
 BluetoothProxy::BluetoothProxy() { global_bluetooth_proxy = this; }
 
+void BluetoothProxy::setup() {
+  this->parent_->add_scanner_state_callback([this](esp32_ble_tracker::ScannerState state) {
+    if (this->api_connection_ != nullptr) {
+      this->send_bluetooth_scanner_state_(state);
+    }
+  });
+}
+
+void BluetoothProxy::send_bluetooth_scanner_state_(esp32_ble_tracker::ScannerState state) {
+  api::BluetoothScannerStateResponse resp;
+  resp.state = static_cast<api::enums::BluetoothScannerState>(state);
+  resp.mode = this->parent_->get_scan_active() ? api::enums::BluetoothScannerMode::BLUETOOTH_SCANNER_MODE_ACTIVE
+                                               : api::enums::BluetoothScannerMode::BLUETOOTH_SCANNER_MODE_PASSIVE;
+  this->api_connection_->send_bluetooth_scanner_state_response(resp);
+}
+
 bool BluetoothProxy::parse_device(const esp32_ble_tracker::ESPBTDevice &device) {
   if (!api::global_api_server->is_connected() || this->api_connection_ == nullptr || this->raw_advertisements_)
     return false;
@@ -40,6 +56,9 @@ bool BluetoothProxy::parse_devices(esp_ble_gap_cb_param_t::ble_scan_result_evt_p
     return false;
 
   api::BluetoothLERawAdvertisementsResponse resp;
+  // Pre-allocate the advertisements vector to avoid reallocations
+  resp.advertisements.reserve(count);
+
   for (size_t i = 0; i < count; i++) {
     auto &result = advertisements[i];
     api::BluetoothLERawAdvertisement adv;
@@ -49,11 +68,13 @@ bool BluetoothProxy::parse_devices(esp_ble_gap_cb_param_t::ble_scan_result_evt_p
 
     uint8_t length = result.adv_data_len + result.scan_rsp_len;
     adv.data.reserve(length);
-    for (uint16_t i = 0; i < length; i++) {
-      adv.data.push_back(result.ble_adv[i]);
-    }
+    // Use a bulk insert instead of individual push_backs
+    adv.data.insert(adv.data.end(), &result.ble_adv[0], &result.ble_adv[length]);
 
     resp.advertisements.push_back(std::move(adv));
+
+    ESP_LOGV(TAG, "Proxying raw packet from %02X:%02X:%02X:%02X:%02X:%02X, length %d. RSSI: %d dB", result.bda[0],
+             result.bda[1], result.bda[2], result.bda[3], result.bda[4], result.bda[5], length, result.rssi);
   }
   ESP_LOGV(TAG, "Proxying %d packets", count);
   this->api_connection_->send_bluetooth_le_raw_advertisements_response(resp);
@@ -66,27 +87,42 @@ void BluetoothProxy::send_api_packet_(const esp32_ble_tracker::ESPBTDevice &devi
   if (!device.get_name().empty())
     resp.name = device.get_name();
   resp.rssi = device.get_rssi();
-  for (auto uuid : device.get_service_uuids()) {
+
+  // Pre-allocate vectors based on known sizes
+  auto service_uuids = device.get_service_uuids();
+  resp.service_uuids.reserve(service_uuids.size());
+  for (auto uuid : service_uuids) {
     resp.service_uuids.push_back(uuid.to_string());
   }
-  for (auto &data : device.get_service_datas()) {
+
+  // Pre-allocate service data vector
+  auto service_datas = device.get_service_datas();
+  resp.service_data.reserve(service_datas.size());
+  for (auto &data : service_datas) {
     api::BluetoothServiceData service_data;
     service_data.uuid = data.uuid.to_string();
     service_data.data.assign(data.data.begin(), data.data.end());
     resp.service_data.push_back(std::move(service_data));
   }
-  for (auto &data : device.get_manufacturer_datas()) {
+
+  // Pre-allocate manufacturer data vector
+  auto manufacturer_datas = device.get_manufacturer_datas();
+  resp.manufacturer_data.reserve(manufacturer_datas.size());
+  for (auto &data : manufacturer_datas) {
     api::BluetoothServiceData manufacturer_data;
     manufacturer_data.uuid = data.uuid.to_string();
     manufacturer_data.data.assign(data.data.begin(), data.data.end());
     resp.manufacturer_data.push_back(std::move(manufacturer_data));
   }
+
   this->api_connection_->send_bluetooth_le_advertisement(resp);
 }
 
 void BluetoothProxy::dump_config() {
   ESP_LOGCONFIG(TAG, "Bluetooth Proxy:");
   ESP_LOGCONFIG(TAG, "  Active: %s", YESNO(this->active_));
+  ESP_LOGCONFIG(TAG, "  Connections: %d", this->connections_.size());
+  ESP_LOGCONFIG(TAG, "  Raw advertisements: %s", YESNO(this->raw_advertisements_));
 }
 
 int BluetoothProxy::get_bluetooth_connections_free() {
@@ -140,11 +176,27 @@ void BluetoothProxy::loop() {
       }
       api::BluetoothGATTGetServicesResponse resp;
       resp.address = connection->get_address();
+      resp.services.reserve(1);  // Always one service per response in this implementation
       api::BluetoothGATTService service_resp;
       service_resp.uuid = get_128bit_uuid_vec(service_result.uuid);
       service_resp.handle = service_result.start_handle;
       uint16_t char_offset = 0;
       esp_gattc_char_elem_t char_result;
+      // Get the number of characteristics directly with one call
+      uint16_t total_char_count = 0;
+      esp_gatt_status_t char_count_status = esp_ble_gattc_get_attr_count(
+          connection->get_gattc_if(), connection->get_conn_id(), ESP_GATT_DB_CHARACTERISTIC,
+          service_result.start_handle, service_result.end_handle, 0, &total_char_count);
+
+      if (char_count_status == ESP_GATT_OK && total_char_count > 0) {
+        // Only reserve if we successfully got a count
+        service_resp.characteristics.reserve(total_char_count);
+      } else if (char_count_status != ESP_GATT_OK) {
+        ESP_LOGW(TAG, "[%d] [%s] Error getting characteristic count, status=%d", connection->get_connection_index(),
+                 connection->address_str().c_str(), char_count_status);
+      }
+
+      // Now process characteristics
       while (true) {  // characteristics
         uint16_t char_count = 1;
         esp_gatt_status_t char_status = esp_ble_gattc_get_all_char(
@@ -166,6 +218,23 @@ void BluetoothProxy::loop() {
         characteristic_resp.handle = char_result.char_handle;
         characteristic_resp.properties = char_result.properties;
         char_offset++;
+
+        // Get the number of descriptors directly with one call
+        uint16_t total_desc_count = 0;
+        esp_gatt_status_t desc_count_status =
+            esp_ble_gattc_get_attr_count(connection->get_gattc_if(), connection->get_conn_id(), ESP_GATT_DB_DESCRIPTOR,
+                                         char_result.char_handle, service_result.end_handle, 0, &total_desc_count);
+
+        if (desc_count_status == ESP_GATT_OK && total_desc_count > 0) {
+          // Only reserve if we successfully got a count
+          characteristic_resp.descriptors.reserve(total_desc_count);
+        } else if (desc_count_status != ESP_GATT_OK) {
+          ESP_LOGW(TAG, "[%d] [%s] Error getting descriptor count for char handle %d, status=%d",
+                   connection->get_connection_index(), connection->address_str().c_str(), char_result.char_handle,
+                   desc_count_status);
+        }
+
+        // Now process descriptors
         uint16_t desc_offset = 0;
         esp_gattc_descr_elem_t desc_result;
         while (true) {  // descriptors
@@ -260,6 +329,12 @@ void BluetoothProxy::bluetooth_device_request(const api::BluetoothDeviceRequest 
                  connection->get_connection_index(), connection->address_str().c_str());
         return;
       } else if (connection->state() == espbt::ClientState::CONNECTING) {
+        if (connection->disconnect_pending()) {
+          ESP_LOGW(TAG, "[%d] [%s] Connection request while pending disconnect, cancelling pending disconnect",
+                   connection->get_connection_index(), connection->address_str().c_str());
+          connection->cancel_pending_disconnect();
+          return;
+        }
         ESP_LOGW(TAG, "[%d] [%s] Connection request ignored, already connecting", connection->get_connection_index(),
                  connection->address_str().c_str());
         return;
@@ -442,6 +517,8 @@ void BluetoothProxy::subscribe_api_connection(api::APIConnection *api_connection
   this->api_connection_ = api_connection;
   this->raw_advertisements_ = flags & BluetoothProxySubscriptionFlag::SUBSCRIPTION_RAW_ADVERTISEMENTS;
   this->parent_->recalculate_advertisement_parser_types();
+
+  this->send_bluetooth_scanner_state_(this->parent_->get_scanner_state());
 }
 
 void BluetoothProxy::unsubscribe_api_connection(api::APIConnection *api_connection) {
@@ -470,6 +547,11 @@ void BluetoothProxy::send_connections_free() {
   api::BluetoothConnectionsFreeResponse call;
   call.free = this->get_bluetooth_connections_free();
   call.limit = this->get_bluetooth_connections_limit();
+  for (auto *connection : this->connections_) {
+    if (connection->address_ != 0) {
+      call.allocated.push_back(connection->address_);
+    }
+  }
   this->api_connection_->send_bluetooth_connections_free_response(call);
 }
 
@@ -507,6 +589,17 @@ void BluetoothProxy::send_device_unpairing(uint64_t address, bool success, esp_e
   call.error = error;
 
   this->api_connection_->send_bluetooth_device_unpairing_response(call);
+}
+
+void BluetoothProxy::bluetooth_scanner_set_mode(bool active) {
+  if (this->parent_->get_scan_active() == active) {
+    return;
+  }
+  ESP_LOGD(TAG, "Setting scanner mode to %s", active ? "active" : "passive");
+  this->parent_->set_scan_active(active);
+  this->parent_->stop_scan();
+  this->parent_->set_scan_continuous(
+      true);  // Set this to true to automatically start scanning again when it has cleaned up.
 }
 
 BluetoothProxy *global_bluetooth_proxy = nullptr;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)

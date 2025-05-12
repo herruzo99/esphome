@@ -1,18 +1,19 @@
 import logging
-import esphome.codegen as cg
-import esphome.config_validation as cv
-import esphome.final_validate as fv
+
 from esphome import automation
+import esphome.codegen as cg
 from esphome.components.output import FloatOutput
 from esphome.components.speaker import Speaker
-
+import esphome.config_validation as cv
 from esphome.const import (
+    CONF_GAIN,
     CONF_ID,
     CONF_OUTPUT,
     CONF_PLATFORM,
-    CONF_TRIGGER_ID,
     CONF_SPEAKER,
+    CONF_TRIGGER_ID,
 )
+import esphome.final_validate as fv
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ CONFIG_SCHEMA = cv.All(
             cv.GenerateID(CONF_ID): cv.declare_id(Rtttl),
             cv.Optional(CONF_OUTPUT): cv.use_id(FloatOutput),
             cv.Optional(CONF_SPEAKER): cv.use_id(Speaker),
+            cv.Optional(CONF_GAIN, default="0.6"): cv.percentage,
             cv.Optional(CONF_ON_FINISHED_PLAYBACK): automation.validate_automation(
                 {
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
@@ -97,6 +99,8 @@ async def to_code(config):
     if CONF_SPEAKER in config:
         out = await cg.get_variable(config[CONF_SPEAKER])
         cg.add(var.set_speaker(out))
+
+    cg.add(var.set_gain(config[CONF_GAIN]))
 
     for conf in config.get(CONF_ON_FINISHED_PLAYBACK, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)

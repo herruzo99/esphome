@@ -3,13 +3,19 @@
 
 #include <esp_http_server.h>
 
-#include <string>
 #include <functional>
-#include <vector>
+#include <list>
 #include <map>
 #include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace esphome {
+namespace web_server {
+class WebServer;
+class ListEntitiesIterator;
+};  // namespace web_server
 namespace web_server_idf {
 
 #define F(string_literal) (string_literal)
@@ -90,11 +96,10 @@ class AsyncWebServerResponseProgmem : public AsyncWebServerResponse {
 
  protected:
   const uint8_t *data_;
-  const size_t size_;
+  size_t size_;
 };
 
 class AsyncWebServerRequest {
-  // FIXME friend class AsyncWebServerResponse;
   friend class AsyncWebServer;
 
  public:
@@ -164,7 +169,9 @@ class AsyncWebServerRequest {
   httpd_req_t *req_;
   AsyncWebServerResponse *rsp_{};
   std::map<std::string, AsyncWebParameter *> params_;
+  std::string post_query_;
   AsyncWebServerRequest(httpd_req_t *req) : req_(req) {}
+  AsyncWebServerRequest(httpd_req_t *req, std::string post_query) : req_(req), post_query_(std::move(post_query)) {}
   void init_response_(AsyncWebServerResponse *rsp, int code, const char *content_type);
 };
 
@@ -191,6 +198,8 @@ class AsyncWebServer {
   uint16_t port_{};
   httpd_handle_t server_{};
   static esp_err_t request_handler(httpd_req_t *r);
+  static esp_err_t request_post_handler(httpd_req_t *r);
+  esp_err_t request_handler_(AsyncWebServerRequest *request) const;
   std::vector<AsyncWebHandler *> handlers_;
   std::function<void(AsyncWebServerRequest *request)> on_not_found_{};
 };
@@ -212,19 +221,58 @@ class AsyncWebHandler {
 };
 
 class AsyncEventSource;
+class AsyncEventSourceResponse;
+
+using message_generator_t = std::string(esphome::web_server::WebServer *, void *);
+
+/*
+  This class holds a pointer to the source component that wants to publish a state event, and a pointer to a function
+  that will lazily generate that event.  The two pointers allow dedup in the deferred queue if multiple publishes for
+  the same component are backed up, and take up only 8 bytes of memory.  The entry in the deferred queue (a
+  std::vector) is the DeferredEvent instance itself (not a pointer to one elsewhere in heap) so still only 8 bytes per
+  entry (and no heap fragmentation).  Even 100 backed up events (you'd have to have at least 100 sensors publishing
+  because of dedup) would take up only 0.8 kB.
+*/
+struct DeferredEvent {
+  friend class AsyncEventSourceResponse;
+
+ protected:
+  void *source_;
+  message_generator_t *message_generator_;
+
+ public:
+  DeferredEvent(void *source, message_generator_t *message_generator)
+      : source_(source), message_generator_(message_generator) {}
+  bool operator==(const DeferredEvent &test) const {
+    return (source_ == test.source_ && message_generator_ == test.message_generator_);
+  }
+} __attribute__((packed));
 
 class AsyncEventSourceResponse {
   friend class AsyncEventSource;
 
  public:
-  void send(const char *message, const char *event = nullptr, uint32_t id = 0, uint32_t reconnect = 0);
+  bool try_send_nodefer(const char *message, const char *event = nullptr, uint32_t id = 0, uint32_t reconnect = 0);
+  void deferrable_send_state(void *source, const char *event_type, message_generator_t *message_generator);
+  void loop();
 
  protected:
-  AsyncEventSourceResponse(const AsyncWebServerRequest *request, AsyncEventSource *server);
+  AsyncEventSourceResponse(const AsyncWebServerRequest *request, esphome::web_server_idf::AsyncEventSource *server,
+                           esphome::web_server::WebServer *ws);
+
+  void deq_push_back_with_dedup_(void *source, message_generator_t *message_generator);
+  void process_deferred_queue_();
+  void process_buffer_();
+
   static void destroy(void *p);
   AsyncEventSource *server_;
   httpd_handle_t hd_{};
   int fd_{};
+  std::vector<DeferredEvent> deferred_queue_;
+  esphome::web_server::WebServer *web_server_;
+  std::unique_ptr<esphome::web_server::ListEntitiesIterator> entities_iterator_;
+  std::string event_buffer_{""};
+  size_t event_bytes_sent_;
 };
 
 using AsyncEventSourceClient = AsyncEventSourceResponse;
@@ -234,7 +282,7 @@ class AsyncEventSource : public AsyncWebHandler {
   using connect_handler_t = std::function<void(AsyncEventSourceClient *)>;
 
  public:
-  AsyncEventSource(std::string url) : url_(std::move(url)) {}
+  AsyncEventSource(std::string url, esphome::web_server::WebServer *ws) : url_(std::move(url)), web_server_(ws) {}
   ~AsyncEventSource() override;
 
   // NOLINTNEXTLINE(readability-identifier-naming)
@@ -246,12 +294,18 @@ class AsyncEventSource : public AsyncWebHandler {
   // NOLINTNEXTLINE(readability-identifier-naming)
   void onConnect(connect_handler_t cb) { this->on_connect_ = std::move(cb); }
 
-  void send(const char *message, const char *event = nullptr, uint32_t id = 0, uint32_t reconnect = 0);
+  void try_send_nodefer(const char *message, const char *event = nullptr, uint32_t id = 0, uint32_t reconnect = 0);
+  void deferrable_send_state(void *source, const char *event_type, message_generator_t *message_generator);
+  void loop();
+  bool empty() { return this->count() == 0; }
+
+  size_t count() const { return this->sessions_.size(); }
 
  protected:
   std::string url_;
   std::set<AsyncEventSourceResponse *> sessions_;
   connect_handler_t on_connect_{};
+  esphome::web_server::WebServer *web_server_;
 };
 
 class DefaultHeaders {

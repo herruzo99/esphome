@@ -1,5 +1,5 @@
 // This file was automatically generated with a tool.
-// See scripts/api_protobuf/api_protobuf.py
+// See script/api_protobuf/api_protobuf.py
 #include "api_pb2_service.h"
 #include "esphome/core/log.h"
 
@@ -179,6 +179,16 @@ bool APIServerConnectionBase::send_text_sensor_state_response(const TextSensorSt
 bool APIServerConnectionBase::send_subscribe_logs_response(const SubscribeLogsResponse &msg) {
   return this->send_message_<SubscribeLogsResponse>(msg, 29);
 }
+#ifdef USE_API_NOISE
+#endif
+#ifdef USE_API_NOISE
+bool APIServerConnectionBase::send_noise_encryption_set_key_response(const NoiseEncryptionSetKeyResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_noise_encryption_set_key_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<NoiseEncryptionSetKeyResponse>(msg, 125);
+}
+#endif
 bool APIServerConnectionBase::send_homeassistant_service_response(const HomeassistantServiceResponse &msg) {
 #ifdef HAS_PROTO_MESSAGE_DUMP
   ESP_LOGVV(TAG, "send_homeassistant_service_response: %s", msg.dump().c_str());
@@ -281,6 +291,24 @@ bool APIServerConnectionBase::send_select_state_response(const SelectStateRespon
 }
 #endif
 #ifdef USE_SELECT
+#endif
+#ifdef USE_SIREN
+bool APIServerConnectionBase::send_list_entities_siren_response(const ListEntitiesSirenResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_list_entities_siren_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<ListEntitiesSirenResponse>(msg, 55);
+}
+#endif
+#ifdef USE_SIREN
+bool APIServerConnectionBase::send_siren_state_response(const SirenStateResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_siren_state_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<SirenStateResponse>(msg, 56);
+}
+#endif
+#ifdef USE_SIREN
 #endif
 #ifdef USE_LOCK
 bool APIServerConnectionBase::send_list_entities_lock_response(const ListEntitiesLockResponse &msg) {
@@ -462,6 +490,16 @@ bool APIServerConnectionBase::send_bluetooth_device_clear_cache_response(const B
   return this->send_message_<BluetoothDeviceClearCacheResponse>(msg, 88);
 }
 #endif
+#ifdef USE_BLUETOOTH_PROXY
+bool APIServerConnectionBase::send_bluetooth_scanner_state_response(const BluetoothScannerStateResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_bluetooth_scanner_state_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<BluetoothScannerStateResponse>(msg, 126);
+}
+#endif
+#ifdef USE_BLUETOOTH_PROXY
+#endif
 #ifdef USE_VOICE_ASSISTANT
 #endif
 #ifdef USE_VOICE_ASSISTANT
@@ -473,6 +511,39 @@ bool APIServerConnectionBase::send_voice_assistant_request(const VoiceAssistantR
 }
 #endif
 #ifdef USE_VOICE_ASSISTANT
+#endif
+#ifdef USE_VOICE_ASSISTANT
+#endif
+#ifdef USE_VOICE_ASSISTANT
+bool APIServerConnectionBase::send_voice_assistant_audio(const VoiceAssistantAudio &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_voice_assistant_audio: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<VoiceAssistantAudio>(msg, 106);
+}
+#endif
+#ifdef USE_VOICE_ASSISTANT
+#endif
+#ifdef USE_VOICE_ASSISTANT
+#endif
+#ifdef USE_VOICE_ASSISTANT
+bool APIServerConnectionBase::send_voice_assistant_announce_finished(const VoiceAssistantAnnounceFinished &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_voice_assistant_announce_finished: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<VoiceAssistantAnnounceFinished>(msg, 120);
+}
+#endif
+#ifdef USE_VOICE_ASSISTANT
+#endif
+#ifdef USE_VOICE_ASSISTANT
+bool APIServerConnectionBase::send_voice_assistant_configuration_response(
+    const VoiceAssistantConfigurationResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_voice_assistant_configuration_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<VoiceAssistantConfigurationResponse>(msg, 122);
+}
 #endif
 #ifdef USE_VOICE_ASSISTANT
 #endif
@@ -512,6 +583,112 @@ bool APIServerConnectionBase::send_text_state_response(const TextStateResponse &
 }
 #endif
 #ifdef USE_TEXT
+#endif
+#ifdef USE_DATETIME_DATE
+bool APIServerConnectionBase::send_list_entities_date_response(const ListEntitiesDateResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_list_entities_date_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<ListEntitiesDateResponse>(msg, 100);
+}
+#endif
+#ifdef USE_DATETIME_DATE
+bool APIServerConnectionBase::send_date_state_response(const DateStateResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_date_state_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<DateStateResponse>(msg, 101);
+}
+#endif
+#ifdef USE_DATETIME_DATE
+#endif
+#ifdef USE_DATETIME_TIME
+bool APIServerConnectionBase::send_list_entities_time_response(const ListEntitiesTimeResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_list_entities_time_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<ListEntitiesTimeResponse>(msg, 103);
+}
+#endif
+#ifdef USE_DATETIME_TIME
+bool APIServerConnectionBase::send_time_state_response(const TimeStateResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_time_state_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<TimeStateResponse>(msg, 104);
+}
+#endif
+#ifdef USE_DATETIME_TIME
+#endif
+#ifdef USE_EVENT
+bool APIServerConnectionBase::send_list_entities_event_response(const ListEntitiesEventResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_list_entities_event_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<ListEntitiesEventResponse>(msg, 107);
+}
+#endif
+#ifdef USE_EVENT
+bool APIServerConnectionBase::send_event_response(const EventResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_event_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<EventResponse>(msg, 108);
+}
+#endif
+#ifdef USE_VALVE
+bool APIServerConnectionBase::send_list_entities_valve_response(const ListEntitiesValveResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_list_entities_valve_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<ListEntitiesValveResponse>(msg, 109);
+}
+#endif
+#ifdef USE_VALVE
+bool APIServerConnectionBase::send_valve_state_response(const ValveStateResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_valve_state_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<ValveStateResponse>(msg, 110);
+}
+#endif
+#ifdef USE_VALVE
+#endif
+#ifdef USE_DATETIME_DATETIME
+bool APIServerConnectionBase::send_list_entities_date_time_response(const ListEntitiesDateTimeResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_list_entities_date_time_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<ListEntitiesDateTimeResponse>(msg, 112);
+}
+#endif
+#ifdef USE_DATETIME_DATETIME
+bool APIServerConnectionBase::send_date_time_state_response(const DateTimeStateResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_date_time_state_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<DateTimeStateResponse>(msg, 113);
+}
+#endif
+#ifdef USE_DATETIME_DATETIME
+#endif
+#ifdef USE_UPDATE
+bool APIServerConnectionBase::send_list_entities_update_response(const ListEntitiesUpdateResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_list_entities_update_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<ListEntitiesUpdateResponse>(msg, 116);
+}
+#endif
+#ifdef USE_UPDATE
+bool APIServerConnectionBase::send_update_state_response(const UpdateStateResponse &msg) {
+#ifdef HAS_PROTO_MESSAGE_DUMP
+  ESP_LOGVV(TAG, "send_update_state_response: %s", msg.dump().c_str());
+#endif
+  return this->send_message_<UpdateStateResponse>(msg, 117);
+}
+#endif
+#ifdef USE_UPDATE
 #endif
 bool APIServerConnectionBase::read_message(uint32_t msg_size, uint32_t msg_type, uint8_t *msg_data) {
   switch (msg_type) {
@@ -747,6 +924,17 @@ bool APIServerConnectionBase::read_message(uint32_t msg_size, uint32_t msg_type,
 #endif
       break;
     }
+    case 57: {
+#ifdef USE_SIREN
+      SirenCommandRequest msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_siren_command_request: %s", msg.dump().c_str());
+#endif
+      this->on_siren_command_request(msg);
+#endif
+      break;
+    }
     case 60: {
 #ifdef USE_LOCK
       LockCommandRequest msg;
@@ -945,6 +1133,138 @@ bool APIServerConnectionBase::read_message(uint32_t msg_size, uint32_t msg_type,
 #endif
       break;
     }
+    case 102: {
+#ifdef USE_DATETIME_DATE
+      DateCommandRequest msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_date_command_request: %s", msg.dump().c_str());
+#endif
+      this->on_date_command_request(msg);
+#endif
+      break;
+    }
+    case 105: {
+#ifdef USE_DATETIME_TIME
+      TimeCommandRequest msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_time_command_request: %s", msg.dump().c_str());
+#endif
+      this->on_time_command_request(msg);
+#endif
+      break;
+    }
+    case 106: {
+#ifdef USE_VOICE_ASSISTANT
+      VoiceAssistantAudio msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_voice_assistant_audio: %s", msg.dump().c_str());
+#endif
+      this->on_voice_assistant_audio(msg);
+#endif
+      break;
+    }
+    case 111: {
+#ifdef USE_VALVE
+      ValveCommandRequest msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_valve_command_request: %s", msg.dump().c_str());
+#endif
+      this->on_valve_command_request(msg);
+#endif
+      break;
+    }
+    case 114: {
+#ifdef USE_DATETIME_DATETIME
+      DateTimeCommandRequest msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_date_time_command_request: %s", msg.dump().c_str());
+#endif
+      this->on_date_time_command_request(msg);
+#endif
+      break;
+    }
+    case 115: {
+#ifdef USE_VOICE_ASSISTANT
+      VoiceAssistantTimerEventResponse msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_voice_assistant_timer_event_response: %s", msg.dump().c_str());
+#endif
+      this->on_voice_assistant_timer_event_response(msg);
+#endif
+      break;
+    }
+    case 118: {
+#ifdef USE_UPDATE
+      UpdateCommandRequest msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_update_command_request: %s", msg.dump().c_str());
+#endif
+      this->on_update_command_request(msg);
+#endif
+      break;
+    }
+    case 119: {
+#ifdef USE_VOICE_ASSISTANT
+      VoiceAssistantAnnounceRequest msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_voice_assistant_announce_request: %s", msg.dump().c_str());
+#endif
+      this->on_voice_assistant_announce_request(msg);
+#endif
+      break;
+    }
+    case 121: {
+#ifdef USE_VOICE_ASSISTANT
+      VoiceAssistantConfigurationRequest msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_voice_assistant_configuration_request: %s", msg.dump().c_str());
+#endif
+      this->on_voice_assistant_configuration_request(msg);
+#endif
+      break;
+    }
+    case 123: {
+#ifdef USE_VOICE_ASSISTANT
+      VoiceAssistantSetConfiguration msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_voice_assistant_set_configuration: %s", msg.dump().c_str());
+#endif
+      this->on_voice_assistant_set_configuration(msg);
+#endif
+      break;
+    }
+    case 124: {
+#ifdef USE_API_NOISE
+      NoiseEncryptionSetKeyRequest msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_noise_encryption_set_key_request: %s", msg.dump().c_str());
+#endif
+      this->on_noise_encryption_set_key_request(msg);
+#endif
+      break;
+    }
+    case 127: {
+#ifdef USE_BLUETOOTH_PROXY
+      BluetoothScannerSetModeRequest msg;
+      msg.decode(msg_data, msg_size);
+#ifdef HAS_PROTO_MESSAGE_DUMP
+      ESP_LOGVV(TAG, "on_bluetooth_scanner_set_mode_request: %s", msg.dump().c_str());
+#endif
+      this->on_bluetooth_scanner_set_mode_request(msg);
+#endif
+      break;
+    }
     default:
       return false;
   }
@@ -1062,8 +1382,8 @@ void APIServerConnection::on_execute_service_request(const ExecuteServiceRequest
   }
   this->execute_service(msg);
 }
-#ifdef USE_COVER
-void APIServerConnection::on_cover_command_request(const CoverCommandRequest &msg) {
+#ifdef USE_API_NOISE
+void APIServerConnection::on_noise_encryption_set_key_request(const NoiseEncryptionSetKeyRequest &msg) {
   if (!this->is_connection_setup()) {
     this->on_no_setup_connection();
     return;
@@ -1072,11 +1392,14 @@ void APIServerConnection::on_cover_command_request(const CoverCommandRequest &ms
     this->on_unauthenticated_access();
     return;
   }
-  this->cover_command(msg);
+  NoiseEncryptionSetKeyResponse ret = this->noise_encryption_set_key(msg);
+  if (!this->send_noise_encryption_set_key_response(ret)) {
+    this->on_fatal_error();
+  }
 }
 #endif
-#ifdef USE_FAN
-void APIServerConnection::on_fan_command_request(const FanCommandRequest &msg) {
+#ifdef USE_BUTTON
+void APIServerConnection::on_button_command_request(const ButtonCommandRequest &msg) {
   if (!this->is_connection_setup()) {
     this->on_no_setup_connection();
     return;
@@ -1085,33 +1408,7 @@ void APIServerConnection::on_fan_command_request(const FanCommandRequest &msg) {
     this->on_unauthenticated_access();
     return;
   }
-  this->fan_command(msg);
-}
-#endif
-#ifdef USE_LIGHT
-void APIServerConnection::on_light_command_request(const LightCommandRequest &msg) {
-  if (!this->is_connection_setup()) {
-    this->on_no_setup_connection();
-    return;
-  }
-  if (!this->is_authenticated()) {
-    this->on_unauthenticated_access();
-    return;
-  }
-  this->light_command(msg);
-}
-#endif
-#ifdef USE_SWITCH
-void APIServerConnection::on_switch_command_request(const SwitchCommandRequest &msg) {
-  if (!this->is_connection_setup()) {
-    this->on_no_setup_connection();
-    return;
-  }
-  if (!this->is_authenticated()) {
-    this->on_unauthenticated_access();
-    return;
-  }
-  this->switch_command(msg);
+  this->button_command(msg);
 }
 #endif
 #ifdef USE_ESP32_CAMERA
@@ -1140,8 +1437,8 @@ void APIServerConnection::on_climate_command_request(const ClimateCommandRequest
   this->climate_command(msg);
 }
 #endif
-#ifdef USE_NUMBER
-void APIServerConnection::on_number_command_request(const NumberCommandRequest &msg) {
+#ifdef USE_COVER
+void APIServerConnection::on_cover_command_request(const CoverCommandRequest &msg) {
   if (!this->is_connection_setup()) {
     this->on_no_setup_connection();
     return;
@@ -1150,11 +1447,11 @@ void APIServerConnection::on_number_command_request(const NumberCommandRequest &
     this->on_unauthenticated_access();
     return;
   }
-  this->number_command(msg);
+  this->cover_command(msg);
 }
 #endif
-#ifdef USE_TEXT
-void APIServerConnection::on_text_command_request(const TextCommandRequest &msg) {
+#ifdef USE_DATETIME_DATE
+void APIServerConnection::on_date_command_request(const DateCommandRequest &msg) {
   if (!this->is_connection_setup()) {
     this->on_no_setup_connection();
     return;
@@ -1163,11 +1460,11 @@ void APIServerConnection::on_text_command_request(const TextCommandRequest &msg)
     this->on_unauthenticated_access();
     return;
   }
-  this->text_command(msg);
+  this->date_command(msg);
 }
 #endif
-#ifdef USE_SELECT
-void APIServerConnection::on_select_command_request(const SelectCommandRequest &msg) {
+#ifdef USE_DATETIME_DATETIME
+void APIServerConnection::on_date_time_command_request(const DateTimeCommandRequest &msg) {
   if (!this->is_connection_setup()) {
     this->on_no_setup_connection();
     return;
@@ -1176,11 +1473,11 @@ void APIServerConnection::on_select_command_request(const SelectCommandRequest &
     this->on_unauthenticated_access();
     return;
   }
-  this->select_command(msg);
+  this->datetime_command(msg);
 }
 #endif
-#ifdef USE_BUTTON
-void APIServerConnection::on_button_command_request(const ButtonCommandRequest &msg) {
+#ifdef USE_FAN
+void APIServerConnection::on_fan_command_request(const FanCommandRequest &msg) {
   if (!this->is_connection_setup()) {
     this->on_no_setup_connection();
     return;
@@ -1189,7 +1486,20 @@ void APIServerConnection::on_button_command_request(const ButtonCommandRequest &
     this->on_unauthenticated_access();
     return;
   }
-  this->button_command(msg);
+  this->fan_command(msg);
+}
+#endif
+#ifdef USE_LIGHT
+void APIServerConnection::on_light_command_request(const LightCommandRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->light_command(msg);
 }
 #endif
 #ifdef USE_LOCK
@@ -1216,6 +1526,110 @@ void APIServerConnection::on_media_player_command_request(const MediaPlayerComma
     return;
   }
   this->media_player_command(msg);
+}
+#endif
+#ifdef USE_NUMBER
+void APIServerConnection::on_number_command_request(const NumberCommandRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->number_command(msg);
+}
+#endif
+#ifdef USE_SELECT
+void APIServerConnection::on_select_command_request(const SelectCommandRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->select_command(msg);
+}
+#endif
+#ifdef USE_SIREN
+void APIServerConnection::on_siren_command_request(const SirenCommandRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->siren_command(msg);
+}
+#endif
+#ifdef USE_SWITCH
+void APIServerConnection::on_switch_command_request(const SwitchCommandRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->switch_command(msg);
+}
+#endif
+#ifdef USE_TEXT
+void APIServerConnection::on_text_command_request(const TextCommandRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->text_command(msg);
+}
+#endif
+#ifdef USE_DATETIME_TIME
+void APIServerConnection::on_time_command_request(const TimeCommandRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->time_command(msg);
+}
+#endif
+#ifdef USE_UPDATE
+void APIServerConnection::on_update_command_request(const UpdateCommandRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->update_command(msg);
+}
+#endif
+#ifdef USE_VALVE
+void APIServerConnection::on_valve_command_request(const ValveCommandRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->valve_command(msg);
 }
 #endif
 #ifdef USE_BLUETOOTH_PROXY
@@ -1354,6 +1768,19 @@ void APIServerConnection::on_unsubscribe_bluetooth_le_advertisements_request(
   this->unsubscribe_bluetooth_le_advertisements(msg);
 }
 #endif
+#ifdef USE_BLUETOOTH_PROXY
+void APIServerConnection::on_bluetooth_scanner_set_mode_request(const BluetoothScannerSetModeRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->bluetooth_scanner_set_mode(msg);
+}
+#endif
 #ifdef USE_VOICE_ASSISTANT
 void APIServerConnection::on_subscribe_voice_assistant_request(const SubscribeVoiceAssistantRequest &msg) {
   if (!this->is_connection_setup()) {
@@ -1365,6 +1792,35 @@ void APIServerConnection::on_subscribe_voice_assistant_request(const SubscribeVo
     return;
   }
   this->subscribe_voice_assistant(msg);
+}
+#endif
+#ifdef USE_VOICE_ASSISTANT
+void APIServerConnection::on_voice_assistant_configuration_request(const VoiceAssistantConfigurationRequest &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  VoiceAssistantConfigurationResponse ret = this->voice_assistant_get_configuration(msg);
+  if (!this->send_voice_assistant_configuration_response(ret)) {
+    this->on_fatal_error();
+  }
+}
+#endif
+#ifdef USE_VOICE_ASSISTANT
+void APIServerConnection::on_voice_assistant_set_configuration(const VoiceAssistantSetConfiguration &msg) {
+  if (!this->is_connection_setup()) {
+    this->on_no_setup_connection();
+    return;
+  }
+  if (!this->is_authenticated()) {
+    this->on_unauthenticated_access();
+    return;
+  }
+  this->voice_assistant_set_configuration(msg);
 }
 #endif
 #ifdef USE_ALARM_CONTROL_PANEL

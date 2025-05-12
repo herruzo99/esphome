@@ -1,43 +1,43 @@
 import re
 
+from esphome import pins
 import esphome.codegen as cg
-import esphome.config_validation as cv
-import esphome.final_validate as fv
 from esphome.components.esp32.const import (
     KEY_ESP32,
-    VARIANT_ESP32S2,
-    VARIANT_ESP32S3,
     VARIANT_ESP32C2,
     VARIANT_ESP32C3,
     VARIANT_ESP32C6,
     VARIANT_ESP32H2,
+    VARIANT_ESP32S2,
+    VARIANT_ESP32S3,
 )
-from esphome import pins
+import esphome.config_validation as cv
 from esphome.const import (
     CONF_CLK_PIN,
+    CONF_CS_PIN,
+    CONF_DATA_PINS,
+    CONF_DATA_RATE,
     CONF_ID,
+    CONF_INVERTED,
     CONF_MISO_PIN,
     CONF_MOSI_PIN,
-    CONF_SPI_ID,
-    CONF_CS_PIN,
     CONF_NUMBER,
-    CONF_INVERTED,
+    CONF_SPI_ID,
     KEY_CORE,
     KEY_TARGET_PLATFORM,
     KEY_VARIANT,
-    CONF_DATA_RATE,
     PLATFORM_ESP32,
     PLATFORM_ESP8266,
     PLATFORM_RP2040,
-    CONF_ALLOW_OTHER_USES,
-    CONF_DATA_PINS,
 )
-from esphome.core import coroutine_with_priority, CORE
+from esphome.core import CORE, coroutine_with_priority
+import esphome.final_validate as fv
 
 CODEOWNERS = ["@esphome/core", "@clydebarrow"]
 spi_ns = cg.esphome_ns.namespace("spi")
 SPIComponent = spi_ns.class_("SPIComponent", cg.Component)
 QuadSPIComponent = spi_ns.class_("QuadSPIComponent", cg.Component)
+OctalSPIComponent = spi_ns.class_("OctalSPIComponent", cg.Component)
 SPIDevice = spi_ns.class_("SPIDevice")
 SPIDataRate = spi_ns.enum("SPIDataRate")
 SPIMode = spi_ns.enum("SPIMode")
@@ -67,14 +67,28 @@ SPI_MODE_OPTIONS = {
     1: SPIMode.MODE1,
     2: SPIMode.MODE2,
     3: SPIMode.MODE3,
+    "0": SPIMode.MODE0,
+    "1": SPIMode.MODE1,
+    "2": SPIMode.MODE2,
+    "3": SPIMode.MODE3,
 }
 
 CONF_SPI_MODE = "spi_mode"
 CONF_FORCE_SW = "force_sw"
 CONF_INTERFACE = "interface"
 CONF_INTERFACE_INDEX = "interface_index"
+TYPE_SINGLE = "single"
+TYPE_QUAD = "quad"
+TYPE_OCTAL = "octal"
 
-# RP2040 SPI pin assignments are complicated. Refer to https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf
+TYPE_CLASS = {
+    TYPE_SINGLE: SPIComponent,
+    TYPE_QUAD: QuadSPIComponent,
+    TYPE_OCTAL: OctalSPIComponent,
+}
+
+# RP2040 SPI pin assignments are complicated;
+# refer to GPIO function select table in https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf
 
 RP_SPI_PINSETS = [
     {
@@ -85,17 +99,13 @@ RP_SPI_PINSETS = [
     {
         CONF_MISO_PIN: [8, 12, 24, 28, -1],
         CONF_CLK_PIN: [10, 14, 26],
-        CONF_MOSI_PIN: [11, 23, 27, -1],
+        CONF_MOSI_PIN: [11, 15, 27, -1],
     },
 ]
 
 
 def get_target_platform():
-    return (
-        CORE.data[KEY_CORE][KEY_TARGET_PLATFORM]
-        if KEY_TARGET_PLATFORM in CORE.data[KEY_CORE]
-        else ""
-    )
+    return CORE.data[KEY_CORE][KEY_TARGET_PLATFORM]
 
 
 def get_target_variant():
@@ -193,8 +203,6 @@ def get_hw_spi(config, available):
 def validate_spi_config(config):
     available = list(range(len(get_hw_interface_list())))
     for spi in config:
-        # map pin number to schema
-        spi[CONF_CLK_PIN] = pins.gpio_output_pin_schema(spi[CONF_CLK_PIN])
         interface = spi[CONF_INTERFACE]
         if interface == "software":
             pass
@@ -230,7 +238,7 @@ def validate_spi_config(config):
         ):
             raise cv.Invalid("Invalid pin selections for hardware SPI interface")
         if CONF_DATA_PINS in spi and CONF_INTERFACE_INDEX not in spi:
-            raise cv.Invalid("Quad mode requires a hardware interface")
+            raise cv.Invalid("Quad and octal modes requires a hardware interface")
 
     return config
 
@@ -251,21 +259,11 @@ def get_spi_interface(index):
     return "new SPIClass(HSPI)"
 
 
-# Do not use a pin schema for the number, as that will trigger a pin reuse error due to duplication of the
-# clock pin in the standard and quad schemas.
-clk_pin_validator = cv.maybe_simple_value(
-    {
-        cv.Required(CONF_NUMBER): cv.Any(cv.int_, cv.string),
-        cv.Optional(CONF_ALLOW_OTHER_USES): cv.boolean,
-    },
-    key=CONF_NUMBER,
-)
-
-SPI_SCHEMA = cv.All(
+SPI_SINGLE_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(SPIComponent),
-            cv.Required(CONF_CLK_PIN): clk_pin_validator,
+            cv.Required(CONF_CLK_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_MISO_PIN): pins.gpio_input_pin_schema,
             cv.Optional(CONF_MOSI_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_FORCE_SW): cv.invalid(
@@ -275,39 +273,52 @@ SPI_SCHEMA = cv.All(
                 *sum(get_hw_interface_list(), ["software", "hardware", "any"]),
                 lower=True,
             ),
+            cv.Optional(CONF_DATA_PINS): cv.invalid(
+                "'data_pins' should be used with 'type: quad or octal' only"
+            ),
         }
     ),
     cv.has_at_least_one_key(CONF_MISO_PIN, CONF_MOSI_PIN),
     cv.only_on([PLATFORM_ESP32, PLATFORM_ESP8266, PLATFORM_RP2040]),
 )
 
-SPI_QUAD_SCHEMA = cv.All(
-    cv.Schema(
-        {
-            cv.GenerateID(): cv.declare_id(QuadSPIComponent),
-            cv.Required(CONF_CLK_PIN): clk_pin_validator,
-            cv.Required(CONF_DATA_PINS): cv.All(
-                cv.ensure_list(pins.internal_gpio_output_pin_number),
-                cv.Length(min=4, max=4),
-            ),
-            cv.Optional(CONF_INTERFACE, default="hardware"): cv.one_of(
-                *sum(get_hw_interface_list(), ["hardware"]),
-                lower=True,
-            ),
-        }
-    ),
-    cv.only_with_esp_idf,
-)
+
+def spi_mode_schema(mode):
+    if mode == TYPE_SINGLE:
+        return SPI_SINGLE_SCHEMA
+    pin_count = 4 if mode == TYPE_QUAD else 8
+    return cv.All(
+        cv.Schema(
+            {
+                cv.GenerateID(): cv.declare_id(TYPE_CLASS[mode]),
+                cv.Required(CONF_CLK_PIN): pins.gpio_output_pin_schema,
+                cv.Required(CONF_DATA_PINS): cv.All(
+                    cv.ensure_list(pins.internal_gpio_output_pin_number),
+                    cv.Length(min=pin_count, max=pin_count),
+                ),
+                cv.Optional(CONF_INTERFACE, default="hardware"): cv.one_of(
+                    *sum(get_hw_interface_list(), ["hardware"]),
+                    lower=True,
+                ),
+                cv.Optional(CONF_MISO_PIN): cv.invalid(
+                    f"'miso_pin' should not be used with {mode} SPI"
+                ),
+                cv.Optional(CONF_MOSI_PIN): cv.invalid(
+                    f"'mosi_pin' should not be used with {mode} SPI"
+                ),
+            }
+        ),
+        cv.only_on([PLATFORM_ESP32]),
+        cv.only_with_esp_idf,
+    )
+
 
 CONFIG_SCHEMA = cv.All(
-    # Order is important. SPI_SCHEMA is the default.
     cv.ensure_list(
-        cv.Any(
-            SPI_SCHEMA,
-            SPI_QUAD_SCHEMA,
-            msg="Standard SPI requires mosi_pin and/or miso_pin; quad SPI requires data_pins only."
-            + " A clock pin is always required",
-        ),
+        cv.typed_schema(
+            {k: spi_mode_schema(k) for k in TYPE_CLASS},
+            default_type=TYPE_SINGLE,
+        )
     ),
     validate_spi_config,
 )
@@ -344,19 +355,17 @@ def spi_device_schema(
     cs_pin_required=True,
     default_data_rate=cv.UNDEFINED,
     default_mode=cv.UNDEFINED,
-    quad=False,
+    mode=TYPE_SINGLE,
 ):
     """Create a schema for an SPI device.
     :param cs_pin_required: If true, make the CS_PIN required in the config.
     :param default_data_rate: Optional data_rate to use as default
     :param default_mode Optional. The default SPI mode to use.
-    :param quad If set, will require an SPI component configured as quad data bits.
+    :param mode Choose single, quad or octal mode.
     :return: The SPI device schema, `extend` this in your config schema.
     """
     schema = {
-        cv.GenerateID(CONF_SPI_ID): cv.use_id(
-            QuadSPIComponent if quad else SPIComponent
-        ),
+        cv.GenerateID(CONF_SPI_ID): cv.use_id(TYPE_CLASS[mode]),
         cv.Optional(CONF_DATA_RATE, default=default_data_rate): SPI_DATA_RATE_SCHEMA,
         cv.Optional(CONF_SPI_MODE, default=default_mode): cv.enum(
             SPI_MODE_OPTIONS, upper=True

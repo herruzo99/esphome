@@ -8,11 +8,11 @@ If adding unit tests ensure that they are fast. Slower integration tests should
 not be part of a unit test suite.
 
 """
-import sys
-import pytest
 
 from pathlib import Path
+import sys
 
+import pytest
 
 here = Path(__file__).parent
 

@@ -65,6 +65,8 @@ extern const uint32_t STATUS_LED_ERROR;
 
 enum class RetryResult { DONE, RETRY };
 
+extern const uint32_t WARN_IF_BLOCKING_OVER_MS;
+
 class Component {
  public:
   /** Where the component's initialization should happen.
@@ -85,7 +87,7 @@ class Component {
 
   /** priority of setup(). higher -> executed earlier
    *
-   * Defaults to 0.
+   * Defaults to setup_priority::DATA, i.e. 600.
    *
    * @return The setup priority of this component
    */
@@ -118,19 +120,24 @@ class Component {
    */
   virtual void mark_failed();
 
-  bool is_failed();
+  void mark_failed(const char *message) {
+    this->status_set_error(message);
+    this->mark_failed();
+  }
 
-  bool is_ready();
+  bool is_failed() const;
+
+  bool is_ready() const;
 
   virtual bool can_proceed();
 
-  bool status_has_warning();
+  bool status_has_warning() const;
 
-  bool status_has_error();
+  bool status_has_error() const;
 
-  void status_set_warning();
+  void status_set_warning(const char *message = "unspecified");
 
-  void status_set_error();
+  void status_set_error(const char *message = "unspecified");
 
   void status_clear_warning();
 
@@ -153,6 +160,8 @@ class Component {
    */
   const char *get_component_source() const;
 
+  bool should_warn_of_blocking(uint32_t blocking_time);
+
  protected:
   friend class Application;
 
@@ -165,9 +174,16 @@ class Component {
    * This will call f every interval ms. Can be cancelled via CancelInterval().
    * Similar to javascript's setInterval().
    *
-   * IMPORTANT: Do not rely on this having correct timing. This is only called from
-   * loop() and therefore can be significantly delay. If you need exact timing please
+   * IMPORTANT NOTE:
+   * The only guarantee offered by this call is that the callback will be called no *earlier* than
+   * the specified interval after the previous call. Any given interval may be longer due to
+   * other components blocking the loop() call.
+   *
+   * So do not rely on this having correct timing. If you need exact timing please
    * use hardware timers.
+   *
+   * Note also that the first call to f will not happen immediately, but after a random delay. This is
+   * intended to prevent many interval functions from being called at the same time.
    *
    * @param name The identifier for this interval function.
    * @param interval The interval in ms.
@@ -193,7 +209,7 @@ class Component {
    * again in the future.
    *
    * The first retry of f happens after `initial_wait_time` milliseconds. The delay between retries is
-   * increased by multipling by `backoff_increase_factor` each time. If no backoff_increase_factor is
+   * increased by multiplying by `backoff_increase_factor` each time. If no backoff_increase_factor is
    * supplied (default = 1.0), the wait time will stay constant.
    *
    * The retry function f needs to accept a single argument: the number of attempts remaining. On the
@@ -272,6 +288,8 @@ class Component {
   uint32_t component_state_{0x0000};  ///< State of this component.
   float setup_priority_override_{NAN};
   const char *component_source_{nullptr};
+  uint32_t warn_if_blocking_over_{WARN_IF_BLOCKING_OVER_MS};
+  std::string error_message_{};
 };
 
 /** This class simplifies creating components that periodically check a state.

@@ -36,7 +36,7 @@ inline static uint8_t to_uint8_scale(float x) { return static_cast<uint8_t>(roun
  *   range as set in the traits, so the output needs to do this.
  *
  * For COLD_WARM_WHITE capability:
- * - cold_white, warm_white: The brightness of the cald and warm white channels of the light.
+ * - cold_white, warm_white: The brightness of the light's cold and warm white channels.
  *
  * All values (except color temperature) are represented using floats in the range 0.0 (off) to 1.0 (on), and are
  * automatically clamped to this range. Properties not used in the current color mode can still have (invalid) values
@@ -265,6 +265,21 @@ class LightColorValues {
   float get_color_temperature() const { return this->color_temperature_; }
   /// Set the color temperature property of these light color values in mired.
   void set_color_temperature(float color_temperature) { this->color_temperature_ = color_temperature; }
+
+  /// Get the color temperature property of these light color values in kelvin.
+  float get_color_temperature_kelvin() const {
+    if (this->color_temperature_ <= 0) {
+      return this->color_temperature_;
+    }
+    return 1000000.0 / this->color_temperature_;
+  }
+  /// Set the color temperature property of these light color values in kelvin.
+  void set_color_temperature_kelvin(float color_temperature) {
+    if (color_temperature <= 0) {
+      return;
+    }
+    this->color_temperature_ = 1000000.0 / color_temperature;
+  }
 
   /// Get the cold white property of these light color values. In range 0.0 to 1.0.
   float get_cold_white() const { return this->cold_white_; }

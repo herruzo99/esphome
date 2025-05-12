@@ -1,8 +1,8 @@
 import abc
+from collections.abc import Sequence
 import inspect
 import math
 import re
-from collections.abc import Generator, Sequence
 from typing import Any, Callable, Optional, Union
 
 from esphome.core import (
@@ -477,6 +477,7 @@ def variable(
     :param rhs: The expression to place on the right hand side of the assignment.
     :param type_: Manually define a type for the variable, only use this when it's not possible
       to do so during config validation phase (for example because of template arguments).
+    :param register: If true register the variable with the core
 
     :return: The new variable as a MockObj.
     """
@@ -492,9 +493,7 @@ def variable(
     return obj
 
 
-def with_local_variable(
-    id_: ID, rhs: SafeExpType, callback: Callable[["MockObj"], None], *args
-) -> None:
+def with_local_variable(id_: ID, rhs: SafeExpType, callback: Callable, *args) -> None:
     """Declare a new variable, not pointer type, in the code generation, within a scoped block
     The variable is only usable within the callback
     The callback cannot be async.
@@ -507,9 +506,9 @@ def with_local_variable(
     """
 
     # throw if the callback is async:
-    assert not inspect.iscoroutinefunction(
-        callback
-    ), "with_local_variable() callback cannot be async!"
+    assert not inspect.iscoroutinefunction(callback), (
+        "with_local_variable() callback cannot be async!"
+    )
 
     CORE.add(RawStatement("{"))  # output opening curly brace
     obj = variable(id_, rhs, None, True)
@@ -589,9 +588,9 @@ def add(expression: Union[Expression, Statement]):
     CORE.add(expression)
 
 
-def add_global(expression: Union[SafeExpType, Statement]):
+def add_global(expression: Union[SafeExpType, Statement], prepend: bool = False):
     """Add an expression to the codegen global storage (above setup())."""
-    CORE.add_global(expression)
+    CORE.add_global(expression, prepend)
 
 
 def add_library(name: str, version: Optional[str], repository: Optional[str] = None):
@@ -599,6 +598,7 @@ def add_library(name: str, version: Optional[str], repository: Optional[str] = N
 
     :param name: The name of the library (for example 'AsyncTCP')
     :param version: The version of the library, may be None.
+    :param repository: The repository for the library
     """
     CORE.add_library(Library(name, version, repository))
 
@@ -654,7 +654,7 @@ async def process_lambda(
     parameters: list[tuple[SafeExpType, str]],
     capture: str = "=",
     return_type: SafeExpType = None,
-) -> Generator[LambdaExpression, None, None]:
+) -> Union[LambdaExpression, None]:
     """Process the given lambda value into a LambdaExpression.
 
     This is a coroutine because lambdas can depend on other IDs,
@@ -673,7 +673,7 @@ async def process_lambda(
     )
 
     if value is None:
-        return
+        return None
     parts = value.parts[:]
     for i, id in enumerate(value.requires_ids):
         full_id, var = await get_variable_with_full_id(id)
@@ -712,7 +712,7 @@ async def templatable(
     value: Any,
     args: list[tuple[SafeExpType, str]],
     output_type: Optional[SafeExpType],
-    to_exp: Any = None,
+    to_exp: Union[Callable, dict] = None,
 ):
     """Generate code for a templatable config option.
 
@@ -789,13 +789,17 @@ class MockObj(Expression):
 
     def class_(self, name: str, *parents: "MockObjClass") -> "MockObjClass":
         op = "" if self.op == "" else "::"
-        return MockObjClass(f"{self.base}{op}{name}", ".", parents=parents)
+        result = MockObjClass(f"{self.base}{op}{name}", ".", parents=parents)
+        CORE.id_classes[str(result)] = result
+        return result
 
     def struct(self, name: str) -> "MockObjClass":
         return self.class_(name)
 
     def enum(self, name: str, is_class: bool = False) -> "MockObj":
-        return MockObjEnum(enum=name, is_class=is_class, base=self.base, op=self.op)
+        result = MockObjEnum(enum=name, is_class=is_class, base=self.base, op=self.op)
+        CORE.id_classes[str(result)] = result
+        return result
 
     def operator(self, name: str) -> "MockObj":
         """Various other operations.

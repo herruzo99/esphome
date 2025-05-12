@@ -1,8 +1,8 @@
 import logging
 from pathlib import Path
 
-import esphome.config_validation as cv
 from esphome import git, loader
+import esphome.config_validation as cv
 from esphome.const import (
     CONF_COMPONENTS,
     CONF_EXTERNAL_COMPONENTS,
@@ -49,7 +49,16 @@ def _process_git_config(config: dict, refresh) -> str:
         password=config.get(CONF_PASSWORD),
     )
 
-    if (repo_dir / "esphome" / "components").is_dir():
+    if path := config.get(CONF_PATH):
+        if (repo_dir / path).is_dir():
+            components_dir = repo_dir / path
+        else:
+            raise cv.Invalid(
+                "Could not find components folder for source. Please check the source contains a '"
+                + path
+                + "' folder"
+            )
+    elif (repo_dir / "esphome" / "components").is_dir():
         components_dir = repo_dir / "esphome" / "components"
     elif (repo_dir / "components").is_dir():
         components_dir = repo_dir / "components"

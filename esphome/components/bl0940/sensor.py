@@ -1,30 +1,30 @@
 import esphome.codegen as cg
-import esphome.config_validation as cv
 from esphome.components import sensor, uart
+import esphome.config_validation as cv
 from esphome.const import (
     CONF_CURRENT,
     CONF_ENERGY,
+    CONF_EXTERNAL_TEMPERATURE,
     CONF_ID,
+    CONF_INTERNAL_TEMPERATURE,
     CONF_POWER,
     CONF_VOLTAGE,
     DEVICE_CLASS_CURRENT,
     DEVICE_CLASS_ENERGY,
     DEVICE_CLASS_POWER,
-    DEVICE_CLASS_VOLTAGE,
     DEVICE_CLASS_TEMPERATURE,
+    DEVICE_CLASS_VOLTAGE,
     STATE_CLASS_MEASUREMENT,
+    STATE_CLASS_TOTAL_INCREASING,
     UNIT_AMPERE,
     UNIT_CELSIUS,
     UNIT_KILOWATT_HOURS,
     UNIT_VOLT,
     UNIT_WATT,
-    STATE_CLASS_TOTAL_INCREASING,
 )
 
 DEPENDENCIES = ["uart"]
 
-CONF_INTERNAL_TEMPERATURE = "internal_temperature"
-CONF_EXTERNAL_TEMPERATURE = "external_temperature"
 
 bl0940_ns = cg.esphome_ns.namespace("bl0940")
 BL0940 = bl0940_ns.class_("BL0940", cg.PollingComponent, uart.UARTDevice)
