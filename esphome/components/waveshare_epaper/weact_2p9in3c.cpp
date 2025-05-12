@@ -1,8 +1,6 @@
 #include "waveshare_epaper.h"
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
-#include "esphome/core/hal.h" // Include for delay()
-#include "esp_timer.h"        // Include for esp_timer_get_time()
 
 namespace esphome {
 namespace waveshare_epaper {
@@ -32,7 +30,7 @@ static const uint8_t UPDATE_FULL[] = {0x22, 0xF7};
 static const uint8_t DRV_OUT_CTL[] = {0x01, 0x27, 0x01, 0x00};  // driver output control
 static const uint8_t DATA_ENTRY[] = {0x11, 0x03};               // data entry mode
 static const uint8_t BORDER_FULL[] = {0x3C, 0x05};              // border waveform
-static const uint8_t TEMP_SENS[] = {0x18, 0x80};                // use internal temp sensor
+static const uint8_t TEMP_SENS[] = {0x18, 0x80};                // mse internal temp sensor
 static const uint8_t DISPLAY_UPDATE[] = {0x21, 0x00, 0x80};     // display update control
 
 // For controlling which part of the image we want to write
@@ -47,10 +45,10 @@ static const uint8_t RAM_Y_POS_CMD = 0x4F; // Renamed from RAM_Y_POS to avoid co
 // Helper macro for timing sections
 #define TIME_SECTION(description, code_block) \
   do { \
-    int64_t start_time_##__LINE__ = esp_timer_get_time(); \
+    int64_t start_time_##__LINE__ = millis(); \
     code_block; \
-    int64_t end_time_##__LINE__ = esp_timer_get_time(); \
-    ESP_LOGD(TAG, "%s took %lld us", description, end_time_##__LINE__ - start_time_##__LINE__); \
+    int64_t end_time_##__LINE__ = millis(); \
+    ESP_LOGD(TAG, "%s took %lld ms", description, end_time_##__LINE__ - start_time_##__LINE__); \
   } while(0)
 
 
@@ -76,7 +74,7 @@ void WeActEPaper2P9In3C::dump_config() {
 
 void WeActEPaper2P9In3C::setup() {
   ESP_LOGD(TAG, "Setting up WeAct 2.90in 3-Color E-Paper...");
-  int64_t setup_start_time = esp_timer_get_time();
+  int64_t setup_start_time = millis();
 
   TIME_SECTION("Pin setup", this->setup_pins_());
 
@@ -110,20 +108,20 @@ void WeActEPaper2P9In3C::setup() {
      ESP_LOGD(TAG, "Busy pin not configured, assuming not busy initially.");
   }
 
-  int64_t setup_end_time = esp_timer_get_time();
-  ESP_LOGI(TAG, "Setup complete. Total setup time: %lld us", setup_end_time - setup_start_time);
+  int64_t setup_end_time = millis();
+  ESP_LOGI(TAG, "Setup complete. Total setup time: %lld ms", setup_end_time - setup_start_time);
 }
 
 void WeActEPaper2P9In3C::send_reset_() {
   if (this->reset_pin_ != nullptr) {
     ESP_LOGD(TAG, "Triggering hardware reset via pin.");
-    int64_t reset_start_time = esp_timer_get_time();
+    int64_t reset_start_time = millis();
     this->reset_pin_->digital_write(false);
     delay(10); // Keep delay >= 2ms, 10ms is safe
     this->reset_pin_->digital_write(true);
     delay(10); // Wait for reset to complete
-    int64_t reset_end_time = esp_timer_get_time();
-    ESP_LOGD(TAG, "Hardware reset duration: %lld us", reset_end_time - reset_start_time);
+    int64_t reset_end_time = millis();
+    ESP_LOGD(TAG, "Hardware reset duration: %lld ms", reset_end_time - reset_start_time);
   } else {
     ESP_LOGD(TAG, "Hardware reset pin not configured, skipping.");
   }
@@ -137,10 +135,10 @@ void WeActEPaper2P9In3C::initialize() {
 
 void WeActEPaper2P9In3C::deep_sleep() {
   ESP_LOGI(TAG, "Entering deep sleep mode...");
-  int64_t sleep_start_time = esp_timer_get_time();
+  int64_t sleep_start_time = millis();
   TIME_SECTION("Send SLEEP command", SEND(SLEEP));
-  int64_t sleep_end_time = esp_timer_get_time();
-  ESP_LOGD(TAG, "Deep sleep command sent in %lld us.", sleep_end_time - sleep_start_time);
+  int64_t sleep_end_time = millis();
+  ESP_LOGD(TAG, "Deep sleep command sent in %lld ms.", sleep_end_time - sleep_start_time);
 }
 
 // Pixel stuff
@@ -149,7 +147,7 @@ void WeActEPaper2P9In3C::deep_sleep() {
 // Set Memory Address Pointer (X counter, Y counter)
 // t and b are y positions (line numbers).
 void WeActEPaper2P9In3C::set_window_(int t, int b) {
-    // X range is always full width for this driver's common usage
+    // X range is always full width for this driver's common msage
     SEND(RAM_X_RANGE);
     // Set Y range based on top (t) and bottom (b) lines
     // Note: bottom line 'b' seems exclusive in some contexts, or inclusive in others.
@@ -177,7 +175,7 @@ void WeActEPaper2P9In3C::set_window_(int t, int b) {
 // send the buffer starting on line `top`, up to line `bottom`.
 void WeActEPaper2P9In3C::write_buffer_(int top, int bottom) {
   ESP_LOGD(TAG, "Writing buffer section: lines %d to %d", top, bottom);
-  int64_t write_section_start_time = esp_timer_get_time();
+  int64_t write_section_start_time = millis();
 
   auto width_bytes = this->get_width_internal() / 8u;
   auto num_lines = bottom - top;
@@ -217,8 +215,8 @@ void WeActEPaper2P9In3C::write_buffer_(int top, int bottom) {
       this->end_data_();
   });
 
-  int64_t write_section_end_time = esp_timer_get_time();
-  ESP_LOGD(TAG, "Finished writing buffer section (%d lines). Duration: %lld us",
+  int64_t write_section_end_time = millis();
+  ESP_LOGD(TAG, "Finished writing buffer section (%d lines). Duration: %lld ms",
            num_lines, write_section_end_time - write_section_start_time);
 }
 
@@ -249,7 +247,7 @@ void HOT WeActEPaper2P9In3C::draw_absolute_pixel_internal(int x, int y, Color co
   const uint32_t color_pos = pos + (this->get_buffer_length_() / 2u); // Offset to color plane buffer
 
   // Check if specifically Red (R>0, G=0, B=0)
-  // Assumes Color struct has r, g, b members > 0 for color presence. Adjust if using different color representation.
+  // Assumes Color struct has r, g, b members > 0 for color presence. Adjust if msing different color representation.
   if (((color.red > 0) && (color.green == 0) && (color.blue == 0))) { // Red pixel
     this->buffer_[color_pos] |= subpos; // Set bit for Red
   } else { // Not-Red pixel (Black or White)
@@ -259,7 +257,7 @@ void HOT WeActEPaper2P9In3C::draw_absolute_pixel_internal(int x, int y, Color co
 
 void WeActEPaper2P9In3C::full_update_() {
   ESP_LOGI(TAG, "Performing full e-paper update sequence...");
-  int64_t start_time = esp_timer_get_time(); // Use microseconds
+  int64_t start_time = millis(); // mse microseconds
 
   ESP_LOGD(TAG, "Calling write_buffer_ for full screen (0 to %d)", this->get_height_internal());
   TIME_SECTION("Full write_buffer_ call", this->write_buffer_(0, this->get_height_internal()));
@@ -278,8 +276,8 @@ void WeActEPaper2P9In3C::full_update_() {
   this->is_busy_ = false;
   ESP_LOGD(TAG, "Set internal busy flag to false (Note: Display HW is still busy refreshing)");
 
-  int64_t end_time = esp_timer_get_time(); // Use microseconds
-  ESP_LOGI(TAG, "Full e-paper update sequence initiated. Sequence setup time: %lld us", end_time - start_time);
+  int64_t end_time = millis(); // mse microseconds
+  ESP_LOGI(TAG, "Full e-paper update sequence initiated. Sequence setup time: %lld ms", end_time - start_time);
   ESP_LOGI(TAG, "Display refresh is now in progress (BUSY pin should be LOW)...");
 }
 
