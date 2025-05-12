@@ -62,16 +62,16 @@ void WeActEPaper2P9In3C::dump_config() {
 void WeActEPaper2P9In3C::setup() {
   setup_pins_();
   this->send_reset_();
-  delay(10)
+  delay(10);
   this->command(SW_RESET);
-  delay(10)
+  delay(10);
   SEND(DRV_OUT_CTL);
   SEND(DATA_ENTRY);
   SEND(BORDER_FULL);
   SEND(TEMP_SENS);
   SEND(DISPLAY_UPDATE);
 
-  this->set_window_(0,0)
+  this->set_window_(0,0);
 
   this->wait_until_idle_();
 }
