@@ -24,7 +24,7 @@ static const uint8_t ACTIVATE = 0x20;
 static const uint8_t WRITE_BLACK = 0x24;
 static const uint8_t WRITE_COLOR = 0x26;
 static const uint8_t SLEEP[] = {0x10, 0x01};
-static const uint8_t UPDATE_FULL[] = {0x22, 0xC7};
+static const uint8_t UPDATE_FULL[] = {0x22, 0xF7};
 
 // Configuration commands
 static const uint8_t DRV_OUT_CTL[] = {0x01, 0x27, 0x01, 0x00};  // driver output control
@@ -47,10 +47,6 @@ int WeActEPaper2P9In3C::get_width_internal() { return WIDTH; }
 int WeActEPaper2P9In3C::get_height_internal() { return HEIGHT; }
 uint32_t WeActEPaper2P9In3C::idle_timeout_() { return 2500; }
 
-WeActEPaper2P9In3C::WeActEPaper2P9In3C() {
-  this->reset_duration_ = 20; // e.g., 20ms
-}
-
 void WeActEPaper2P9In3C::dump_config() {
   LOG_DISPLAY("", "WeAct E-Paper (3 Color)", this)
   ESP_LOGCONFIG(TAG, "  Model: 2.90in Red+Black");
@@ -63,49 +59,23 @@ void WeActEPaper2P9In3C::dump_config() {
 
 // Device lifecycle
 
-// In weact_2p9in3c.cpp.txt
 void WeActEPaper2P9In3C::setup() {
-  ESP_LOGD(TAG, "WeActEPaper2P9In3C::setup()");
-  WaveshareEPaperBase::setup(); // This will call your overridden initialize()
-  // Any other ESPHome component-specific setup can go here if needed
-}
-
-void WeActEPaper2P9In3C::initialize() {
-  ESP_LOGD(TAG, "WeActEPaper2P9In3C::initialize() - Hardware Init");
-  // The base class setup already handled pins, SPI, and reset.
-  // We need to wait for idle after reset.
+  setup_pins_();
+  delay(20);
+  this->send_reset_();
+  // as a one-off delay this is not worth working around.
+  delay(100);  // NOLINT
   this->wait_until_idle_();
   this->command(SW_RESET);
   this->wait_until_idle_();
 
-  // Add Power On Command
-  this->command(0x04); // Power ON
-  this->wait_until_idle_();
-
-  // Add Booster Soft Start (example from GxEPD2 for SSD1680)
-  this->command(0x0C);
-  this->data(0xD7);
-  this->data(0xD6);
-  this->data(0x9D);
-
-  // Add VCOM Setting (example from GxEPD2 for GDEW029C90 which uses SSD1680)
-  this->command(0x2C); // Write VCOM Register
-  this->data(0x68); // Check datasheet/GxEPD2 for optimal value (GxEPD2 uses 0x68 for GDEW029C90, 0xA8 is also common)
-
-  // Your existing init commands (adjust as necessary)
-  SEND(DRV_OUT_CTL);    // {0x01, 0x27, 0x01, 0x00} -> Correct for 296 height
-  SEND(DATA_ENTRY);     // {0x11, 0x03} -> Correct
-
-  // Border Waveform: GxEPD2 for GDEW029C90 often uses 0x01.
-  // Your 0x05 might be okay, but 0x01 is also worth trying if borders are problematic.
-  // static const uint8_t BORDER_FULL[] = {0x3C, 0x01}; // Alternative to try
-  SEND(BORDER_FULL);    // {0x3C, 0x05}
-
-  SEND(TEMP_SENS);      // {0x18, 0x80} -> Correct
-  SEND(DISPLAY_UPDATE); // {0x21, 0x00, 0x80} -> Correct
+  SEND(DRV_OUT_CTL);
+  SEND(DATA_ENTRY);
+  SEND(BORDER_FULL);
+  SEND(TEMP_SENS);
+  SEND(DISPLAY_UPDATE);
 
   this->wait_until_idle_();
-  ESP_LOGD(TAG, "Hardware Initialized");
 }
 
 void WeActEPaper2P9In3C::send_reset_() {
@@ -116,6 +86,8 @@ void WeActEPaper2P9In3C::send_reset_() {
   }
 }
 
+// must implement, but we override setup to have more control
+void WeActEPaper2P9In3C::initialize() {}
 
 void WeActEPaper2P9In3C::deep_sleep() { SEND(SLEEP); }
 
@@ -157,26 +129,24 @@ void WeActEPaper2P9In3C::write_buffer_(int top, int bottom) {
 
 void HOT WeActEPaper2P9In3C::draw_absolute_pixel_internal(int x, int y, Color color) {
   if (x >= this->get_width_internal() || y >= this->get_height_internal() || x < 0 || y < 0)
-      return;
+    return;
 
   const uint32_t pos = (x + y * this->get_width_internal()) / 8u;
-  const uint8_t subpos = 0x80 >> (x & 0x07); // Bit mask for the pixel
+  const uint8_t subpos = 0x80 >> (x & 0x07);
 
-  // Black/White plane
-  // Assuming standard SSD1680: 0 for black, 1 for white
-  if (color.is_on()) { // ESPHome color is ON (typically black)
-      this->buffer_[pos] &= ~subpos; // Clear bit for black
-  } else { // ESPHome color is OFF (typically white)
-      this->buffer_[pos] |= subpos;  // Set bit for white
+  // flip logic
+  if (color == display::COLOR_OFF) {
+    this->buffer_[pos] |= subpos;
+  } else {
+    this->buffer_[pos] &= ~subpos;
   }
 
-  // Color (Red) plane
-  // Assuming standard SSD1680: 0 for red, 1 for not-red (use B/W plane)
-  const uint32_t color_buf_offset = this->get_buffer_length_() / 2u;
-  if ((color.red > 0) && (color.green == 0) && (color.blue == 0)) { // If ESPHome color is pure red
-      this->buffer_[pos + color_buf_offset] &= ~subpos; // Clear bit to indicate RED
+  // draw red pixels only if the color contains red only
+  const uint32_t buf_half_len = this->get_buffer_length_() / 2u;
+  if (((color.red > 0) && (color.green == 0) && (color.blue == 0))) {
+    this->buffer_[pos + buf_half_len] |= subpos;
   } else {
-      this->buffer_[pos + color_buf_offset] |= subpos;  // Set bit to indicate NOT RED (use B/W plane)
+    this->buffer_[pos + buf_half_len] &= ~subpos;
   }
 }
 
